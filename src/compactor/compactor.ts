@@ -33,9 +33,7 @@ export class VeridicCompactor {
     };
   }
 
-  /**
-   * Run full compaction
-   */
+  
   async compact(): Promise<CompactionReport> {
     this.report = this.initReport();
 
@@ -74,9 +72,7 @@ export class VeridicCompactor {
     }
   }
 
-  /**
-   * Archive claims older than retention period
-   */
+  
   private async archiveOldClaims(): Promise<void> {
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - this.config.retentionDays);
@@ -140,9 +136,7 @@ export class VeridicCompactor {
     }
   }
 
-  /**
-   * Archive evidence for archived claims
-   */
+  
   private async archiveOldEvidence(): Promise<void> {
     const evidence = await this.db.query<{
       evidence_id: string;
@@ -182,9 +176,7 @@ export class VeridicCompactor {
     }
   }
 
-  /**
-   * Create daily summaries from archived data
-   */
+  
   private async createDailySummaries(): Promise<void> {
     const dates = await this.db.query<{ summary_date: string }>(
       `SELECT DISTINCT DATE(original_created_at) as summary_date
@@ -262,9 +254,7 @@ export class VeridicCompactor {
     }
   }
 
-  /**
-   * Clean orphaned data
-   */
+  
   private async cleanOrphans(): Promise<void> {
     const orphanedEvidenceCount = await this.db.query<{ count: number }>(
       `SELECT COUNT(*) as count FROM evidence WHERE claim_id NOT IN (
@@ -297,9 +287,7 @@ export class VeridicCompactor {
     this.report.orphansCleaned += orphanedVerificationsCount[0]?.count ?? 0;
   }
 
-  /**
-   * Optimize database (VACUUM, REINDEX, ANALYZE)
-   */
+  
   private async optimizeDatabase(): Promise<void> {
     if (this.config.vacuum) {
       try {
@@ -329,9 +317,7 @@ export class VeridicCompactor {
     }
   }
 
-  /**
-   * Get database file size
-   */
+  
   private async getDatabaseSize(): Promise<number> {
     try {
       const result = await this.db.query<{ page_count: number; page_size: number }>(
@@ -345,9 +331,7 @@ export class VeridicCompactor {
     return 0;
   }
 
-  /**
-   * Record compaction start in history
-   */
+  
   private async recordCompactionStart(): Promise<void> {
     await this.db.insert("compaction_history", {
       compaction_id: this.report.compactionId,
@@ -357,9 +341,7 @@ export class VeridicCompactor {
     });
   }
 
-  /**
-   * Record compaction completion in history
-   */
+  
   private async recordCompactionComplete(): Promise<void> {
     await this.db.execute(
       `UPDATE compaction_history SET
@@ -388,9 +370,7 @@ export class VeridicCompactor {
     );
   }
 
-  /**
-   * Get compaction history
-   */
+  
   async getHistory(limit = 10): Promise<CompactionReport[]> {
     const rows = await this.db.query<{
       compaction_id: string;

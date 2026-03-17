@@ -6,31 +6,14 @@ import {
 export type { CompactionConfig } from "./compactor/types.js";
 
 export interface VeridicConfig {
-  /** Enable LLM-based claim extraction when regex confidence is low */
   enableLLM: boolean;
-
-  /** Minimum confidence for regex extraction (0-1) */
   extractionThreshold: number;
-
-  /** Minimum confidence to mark claim as verified (0-1) */
   verificationThreshold: number;
-
-  /** Score below which to show warning */
   trustWarningThreshold: number;
-
-  /** Score below which to block actions */
   trustBlockThreshold: number;
-
-  /** Enable real-time verification */
   enableRealtime: boolean;
-
-  /** Maximum claims to track per session */
   maxClaimsPerSession: number;
-
-  /** Enable auto-verification after each response */
   autoVerify: boolean;
-
-  /** Severity weights for trust score calculation */
   severityWeights: {
     file_created: number;
     file_modified: number;
@@ -47,8 +30,6 @@ export interface VeridicConfig {
     task_completed: number;
     unknown: number;
   };
-
-  /** Compaction configuration */
   compaction: CompactionConfig;
 }
 

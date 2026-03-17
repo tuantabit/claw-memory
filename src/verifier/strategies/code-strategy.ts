@@ -8,9 +8,7 @@ import type {
 } from "../../types.js";
 
 export class CodeVerificationStrategy {
-  /**
-   * Verify a code-related claim
-   */
+  
   verify(input: VerificationInput): VerificationOutput {
     const { claim, evidence } = input;
 
@@ -49,9 +47,7 @@ export class CodeVerificationStrategy {
     }
   }
 
-  /**
-   * Verify code was added
-   */
+  
   private verifyCodeAdded(claim: Claim, evidence: Evidence[]): VerificationOutput {
     const supporting: Evidence[] = [];
     const contradicting: Evidence[] = [];
@@ -104,9 +100,7 @@ export class CodeVerificationStrategy {
     };
   }
 
-  /**
-   * Verify code was removed
-   */
+  
   private verifyCodeRemoved(claim: Claim, evidence: Evidence[]): VerificationOutput {
     const supporting: Evidence[] = [];
     const contradicting: Evidence[] = [];
@@ -152,9 +146,6 @@ export class CodeVerificationStrategy {
     };
   }
 
-  /**
-   * Verify code/error was fixed
-   */
   private verifyCodeFixed(claim: Claim, evidence: Evidence[]): VerificationOutput {
     const supporting: Evidence[] = [];
     const contradicting: Evidence[] = [];
@@ -213,9 +204,7 @@ export class CodeVerificationStrategy {
     };
   }
 
-  /**
-   * Generic code verification
-   */
+  
   private verifyGenericCode(claim: Claim, evidence: Evidence[]): VerificationOutput {
     const supporting = evidence.filter((e) => e.supports_claim);
     const contradicting = evidence.filter((e) => !e.supports_claim);
@@ -246,9 +235,7 @@ export class CodeVerificationStrategy {
     };
   }
 
-  /**
-   * Check if this strategy handles the claim type
-   */
+  
   handles(claimType: string): boolean {
     return ["code_added", "code_removed", "code_fixed", "error_fixed", "config_changed"].includes(
       claimType

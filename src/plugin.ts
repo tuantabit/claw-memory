@@ -89,13 +89,9 @@ export function createVeridicPlugin(db: Database, config?: Partial<VeridicConfig
     name: "Veridic Claw",
     description: "Verify agent claims - detect when agents lie about their actions",
 
-    /**
-     * Lifecycle hooks
-     */
+    
     hooks: {
-      /**
-       * Before agent starts - inject trust context
-       */
+      
       before_agent_start: async (context: unknown) => {
         const pluginState = await initializePlugin(db, resolvedConfig);
         const { engine } = pluginState;
@@ -125,9 +121,7 @@ export function createVeridicPlugin(db: Database, config?: Partial<VeridicConfig
         return {};
       },
 
-      /**
-       * After agent ends - extract and verify claims
-       */
+      
       agent_end: async (context: unknown) => {
         if (!state?.initialized) {
           return;
@@ -179,9 +173,7 @@ export function createVeridicPlugin(db: Database, config?: Partial<VeridicConfig
       },
     },
 
-    /**
-     * Register tools
-     */
+    
     register(api: unknown, context: unknown) {
       if (!state?.initialized) {
         return {};
@@ -201,16 +193,12 @@ export function createVeridicPlugin(db: Database, config?: Partial<VeridicConfig
       return toolMap;
     },
 
-    /**
-     * Get engine instance
-     */
+    
     getEngine(): VeridicEngine | null {
       return state?.engine ?? null;
     },
 
-    /**
-     * Shutdown
-     */
+    
     async shutdown() {
       state = null;
     },

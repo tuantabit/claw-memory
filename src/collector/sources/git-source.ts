@@ -26,9 +26,7 @@ export class GitEvidenceSource {
     this.cwd = cwd;
   }
 
-  /**
-   * Collect evidence for a claim from git
-   */
+  
   async collectForClaim(claim: Claim): Promise<Evidence[]> {
     const evidence: Evidence[] = [];
 
@@ -59,9 +57,7 @@ export class GitEvidenceSource {
     return evidence;
   }
 
-  /**
-   * Collect evidence for a specific file from git
-   */
+  
   async collectForFile(claim: Claim, filePath: string): Promise<Evidence | null> {
     try {
       const status = await this.getFileStatus(filePath);
@@ -92,9 +88,7 @@ export class GitEvidenceSource {
     }
   }
 
-  /**
-   * Collect evidence from recent diffs
-   */
+  
   async collectRecentDiffs(claim: Claim): Promise<Evidence[]> {
     const evidence: Evidence[] = [];
 
@@ -139,9 +133,7 @@ export class GitEvidenceSource {
     return evidence;
   }
 
-  /**
-   * Check if directory is a git repo
-   */
+  
   async isGitRepo(): Promise<boolean> {
     try {
       await execAsync("git rev-parse --git-dir", { cwd: this.cwd });
@@ -151,9 +143,7 @@ export class GitEvidenceSource {
     }
   }
 
-  /**
-   * Get git status for a file
-   */
+  
   async getFileStatus(filePath: string): Promise<string> {
     try {
       const { stdout } = await execAsync(
@@ -176,9 +166,7 @@ export class GitEvidenceSource {
     }
   }
 
-  /**
-   * Get git diff for a file
-   */
+  
   async getFileDiff(filePath: string): Promise<GitDiff | null> {
     try {
       const { stdout } = await execAsync(
@@ -206,9 +194,7 @@ export class GitEvidenceSource {
     }
   }
 
-  /**
-   * Get overall git status
-   */
+  
   async getStatus(): Promise<GitStatus> {
     try {
       const { stdout } = await execAsync("git status --porcelain", {
@@ -242,9 +228,7 @@ export class GitEvidenceSource {
     }
   }
 
-  /**
-   * Parse git diff --stat output
-   */
+  
   private parseGitDiffStat(output: string): string[] {
     const files: string[] = [];
     const lines = output.split("\n");
@@ -259,9 +243,7 @@ export class GitEvidenceSource {
     return files;
   }
 
-  /**
-   * Check if claim type is code-related
-   */
+  
   private isCodeClaim(claimType: string): boolean {
     return [
       "file_created",
@@ -273,9 +255,7 @@ export class GitEvidenceSource {
     ].includes(claimType);
   }
 
-  /**
-   * Evaluate if git status supports claim
-   */
+  
   private evaluateGitSupport(
     claim: Claim,
     status: string,
@@ -303,9 +283,7 @@ export class GitEvidenceSource {
     }
   }
 
-  /**
-   * Calculate confidence for git evidence
-   */
+  
   private calculateGitConfidence(
     claim: Claim,
     status: string,

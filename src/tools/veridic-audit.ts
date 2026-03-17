@@ -3,11 +3,8 @@ import type { VeridicEngine } from "../engine.js";
 import type { TrustReport, TrustIssue } from "../types.js";
 
 export interface AuditInput {
-  /** Session ID to audit (defaults to current) */
   session_id?: string;
-  /** Only show issues of this severity or higher */
   min_severity?: "low" | "medium" | "high" | "critical";
-  /** Include full details */
   detailed?: boolean;
 }
 

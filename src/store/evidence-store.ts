@@ -6,9 +6,7 @@ import type { Evidence, EvidenceSource } from "../types.js";
 export class EvidenceStore {
   constructor(private db: Database) {}
 
-  /**
-   * Create new evidence
-   */
+  
   async create(
     claimId: string,
     source: EvidenceSource,
@@ -41,9 +39,7 @@ export class EvidenceStore {
     return evidence;
   }
 
-  /**
-   * Get evidence by ID
-   */
+  
   async getById(evidenceId: string): Promise<Evidence | null> {
     const rows = await this.db.query<Evidence>(
       `SELECT * FROM evidence WHERE evidence_id = ?`,
@@ -55,9 +51,7 @@ export class EvidenceStore {
     return this.hydrate(rows[0]);
   }
 
-  /**
-   * Get evidence for a claim
-   */
+  
   async getByClaimId(claimId: string): Promise<Evidence[]> {
     const rows = await this.db.query<Evidence>(
       `SELECT * FROM evidence
@@ -69,9 +63,7 @@ export class EvidenceStore {
     return rows.map((r) => this.hydrate(r));
   }
 
-  /**
-   * Get evidence by source
-   */
+  
   async getBySource(
     claimId: string,
     source: EvidenceSource
@@ -86,9 +78,7 @@ export class EvidenceStore {
     return rows.map((r) => this.hydrate(r));
   }
 
-  /**
-   * Get supporting evidence
-   */
+  
   async getSupporting(claimId: string): Promise<Evidence[]> {
     const rows = await this.db.query<Evidence>(
       `SELECT * FROM evidence
@@ -100,9 +90,7 @@ export class EvidenceStore {
     return rows.map((r) => this.hydrate(r));
   }
 
-  /**
-   * Get contradicting evidence
-   */
+  
   async getContradicting(claimId: string): Promise<Evidence[]> {
     const rows = await this.db.query<Evidence>(
       `SELECT * FROM evidence
@@ -114,9 +102,7 @@ export class EvidenceStore {
     return rows.map((r) => this.hydrate(r));
   }
 
-  /**
-   * Get evidence count for claim
-   */
+  
   async countByClaimId(claimId: string): Promise<{
     total: number;
     supporting: number;
@@ -148,9 +134,7 @@ export class EvidenceStore {
     };
   }
 
-  /**
-   * Check if evidence exists for claim
-   */
+  
   async hasEvidence(claimId: string): Promise<boolean> {
     const rows = await this.db.query<{ count: number }>(
       `SELECT COUNT(*) as count FROM evidence WHERE claim_id = ?`,
@@ -160,9 +144,7 @@ export class EvidenceStore {
     return Number(rows[0]?.count ?? 0) > 0;
   }
 
-  /**
-   * Get all evidence by source reference
-   */
+  
   async getBySourceRef(sourceRef: string): Promise<Evidence[]> {
     const rows = await this.db.query<Evidence>(
       `SELECT * FROM evidence
@@ -174,25 +156,19 @@ export class EvidenceStore {
     return rows.map((r) => this.hydrate(r));
   }
 
-  /**
-   * Delete evidence
-   */
+  
   async delete(evidenceId: string): Promise<void> {
     await this.db.execute(`DELETE FROM evidence WHERE evidence_id = ?`, [
       evidenceId,
     ]);
   }
 
-  /**
-   * Delete all evidence for a claim
-   */
+  
   async deleteByClaimId(claimId: string): Promise<void> {
     await this.db.execute(`DELETE FROM evidence WHERE claim_id = ?`, [claimId]);
   }
 
-  /**
-   * Hydrate evidence from database row
-   */
+  
   private hydrate(row: Evidence): Evidence {
     return {
       ...row,

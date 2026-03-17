@@ -8,9 +8,7 @@ import type {
 } from "../../types.js";
 
 export class CommandVerificationStrategy {
-  /**
-   * Verify a command-related claim
-   */
+  
   verify(input: VerificationInput): VerificationOutput {
     const { claim, evidence } = input;
 
@@ -35,9 +33,7 @@ export class CommandVerificationStrategy {
     return this.verifyCommandClaim(claim, cmdEvidence);
   }
 
-  /**
-   * Verify test-related claims
-   */
+  
   private verifyTestClaim(claim: Claim, evidence: Evidence[]): VerificationOutput {
     const supporting: Evidence[] = [];
     const contradicting: Evidence[] = [];
@@ -100,9 +96,7 @@ export class CommandVerificationStrategy {
     };
   }
 
-  /**
-   * Verify general command claims
-   */
+  
   private verifyCommandClaim(claim: Claim, evidence: Evidence[]): VerificationOutput {
     const commandEntities = claim.entities.filter((e) => e.type === "command");
     const expectedCommands = commandEntities.map((e) => e.value);
@@ -153,9 +147,7 @@ export class CommandVerificationStrategy {
     };
   }
 
-  /**
-   * Check if this strategy handles the claim type
-   */
+  
   handles(claimType: string): boolean {
     return ["command_executed", "test_passed", "test_failed", "dependency_added"].includes(
       claimType

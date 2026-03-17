@@ -6,9 +6,7 @@ import { nanoid } from "nanoid";
 export class ToolEvidenceSource {
   constructor(private db: Database) {}
 
-  /**
-   * Collect evidence for a claim from tool calls
-   */
+  
   async collectForClaim(claim: Claim): Promise<Evidence[]> {
     const evidence: Evidence[] = [];
 
@@ -27,9 +25,7 @@ export class ToolEvidenceSource {
     return evidence;
   }
 
-  /**
-   * Get expected tools for a claim type
-   */
+  
   private getExpectedTools(claimType: string): string[] {
     const toolMap: Record<string, string[]> = {
       file_created: ["Write", "file_write", "create_file"],
@@ -43,15 +39,13 @@ export class ToolEvidenceSource {
       test_failed: ["Bash", "bash"],
       dependency_added: ["Bash", "bash"],
       config_changed: ["Edit", "Write", "file_edit", "file_write"],
-      task_completed: [], // No specific tool
+      task_completed: [],
     };
 
     return toolMap[claimType] ?? [];
   }
 
-  /**
-   * Collect evidence for a specific tool
-   */
+  
   async collectForTool(claim: Claim, toolName: string): Promise<Evidence[]> {
     const evidence: Evidence[] = [];
 
@@ -90,9 +84,7 @@ export class ToolEvidenceSource {
     return evidence;
   }
 
-  /**
-   * Collect evidence by searching for entity in tool inputs
-   */
+  
   async collectForEntity(claim: Claim, entityValue: string): Promise<Evidence[]> {
     const evidence: Evidence[] = [];
 
@@ -132,9 +124,7 @@ export class ToolEvidenceSource {
     return evidence;
   }
 
-  /**
-   * Get all tool calls for a session
-   */
+  
   async getSessionTools(sessionId: string, limit = 50): Promise<Action[]> {
     return this.db.query<Action>(
       `SELECT * FROM actions
@@ -145,9 +135,7 @@ export class ToolEvidenceSource {
     );
   }
 
-  /**
-   * Evaluate if tool call supports the claim
-   */
+  
   private evaluateToolSupport(claim: Claim, action: Action): boolean {
     const input = action.tool_input as Record<string, unknown> | null;
     const result = action.tool_result as Record<string, unknown> | null;
@@ -168,13 +156,11 @@ export class ToolEvidenceSource {
                (result?.exitCode !== 0 && result?.exitCode !== undefined);
 
       default:
-        return true; // Tool call exists, some support
+        return true;
     }
   }
 
-  /**
-   * Check if claim entity matches tool input
-   */
+  
   private entityMatchesInput(
     claim: Claim,
     input: Record<string, unknown> | null
@@ -185,9 +171,7 @@ export class ToolEvidenceSource {
     return claim.entities.some((e) => inputStr.includes(e.value));
   }
 
-  /**
-   * Check if claim has command in tool input
-   */
+  
   private hasCommandInInput(
     claim: Claim,
     input: Record<string, unknown> | null
@@ -202,9 +186,7 @@ export class ToolEvidenceSource {
     return commands.some((cmd) => inputStr.includes(cmd));
   }
 
-  /**
-   * Calculate relevance of action to claim
-   */
+  
   private calculateRelevance(claim: Claim, action: Action): number {
     let relevance = 0.5;
 
@@ -227,9 +209,7 @@ export class ToolEvidenceSource {
     return Math.min(relevance, 1.0);
   }
 
-  /**
-   * Summarize tool result for storage
-   */
+  
   private summarizeResult(result: Record<string, unknown> | null): Record<string, unknown> | null {
     if (!result) return null;
 

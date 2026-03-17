@@ -2,11 +2,8 @@
 import type { VeridicEngine } from "../engine.js";
 
 export interface ScoreInput {
-  /** Session ID (defaults to current) */
   session_id?: string;
-  /** Include score history */
   include_history?: boolean;
-  /** Number of historical scores to include */
   history_limit?: number;
 }
 

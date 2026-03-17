@@ -119,7 +119,7 @@ export async function extractClaimsWithLLM(
 ): Promise<Claim[]> {
   try {
     const response = await llmApi.complete({
-      model: "claude-3-haiku-20240307", // Use fast model
+      model: "claude-3-haiku-20240307",
       maxTokens: 1000,
       system: EXTRACTION_PROMPT,
       messages: [

@@ -8,9 +8,7 @@ import type {
 } from "../../types.js";
 
 export class CompletionVerificationStrategy {
-  /**
-   * Verify a task completion claim
-   */
+  
   verify(input: VerificationInput): VerificationOutput {
     const { claim, evidence } = input;
 
@@ -62,9 +60,7 @@ export class CompletionVerificationStrategy {
     };
   }
 
-  /**
-   * Calculate activity score based on evidence
-   */
+  
   private calculateActivityScore(
     toolEvidence: Evidence[],
     fileEvidence: Evidence[],
@@ -87,9 +83,7 @@ export class CompletionVerificationStrategy {
     return Math.min(score, 1.0);
   }
 
-  /**
-   * Check if there was recent activity
-   */
+  
   private hasRecentActivity(evidence: Evidence[]): boolean {
     const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
 
@@ -99,9 +93,7 @@ export class CompletionVerificationStrategy {
     });
   }
 
-  /**
-   * Count successful outcomes
-   */
+  
   private countSuccessfulOutcomes(evidence: Evidence[]): number {
     let count = 0;
 
@@ -128,9 +120,7 @@ export class CompletionVerificationStrategy {
     return count;
   }
 
-  /**
-   * Check if this strategy handles the claim type
-   */
+  
   handles(claimType: string): boolean {
     return claimType === "task_completed";
   }

@@ -6,9 +6,7 @@ import type { Verification, VerificationStatus, VerificationFilter } from "../ty
 export class VerificationStore {
   constructor(private db: Database) {}
 
-  /**
-   * Create new verification
-   */
+  
   async create(
     claimId: string,
     status: VerificationStatus,
@@ -38,9 +36,7 @@ export class VerificationStore {
     return verification;
   }
 
-  /**
-   * Get verification by ID
-   */
+  
   async getById(verificationId: string): Promise<Verification | null> {
     const rows = await this.db.query<Verification>(
       `SELECT * FROM verifications WHERE verification_id = ?`,
@@ -52,9 +48,7 @@ export class VerificationStore {
     return this.hydrate(rows[0]);
   }
 
-  /**
-   * Get verification for a claim
-   */
+  
   async getByClaimId(claimId: string): Promise<Verification | null> {
     const rows = await this.db.query<Verification>(
       `SELECT * FROM verifications
@@ -69,9 +63,7 @@ export class VerificationStore {
     return this.hydrate(rows[0]);
   }
 
-  /**
-   * Get all verifications for a claim (history)
-   */
+  
   async getHistoryByClaimId(claimId: string): Promise<Verification[]> {
     const rows = await this.db.query<Verification>(
       `SELECT * FROM verifications
@@ -83,9 +75,7 @@ export class VerificationStore {
     return rows.map((r) => this.hydrate(r));
   }
 
-  /**
-   * Get verifications by status
-   */
+  
   async getByStatus(
     sessionId: string,
     status: VerificationStatus,
@@ -103,9 +93,7 @@ export class VerificationStore {
     return rows.map((r) => this.hydrate(r));
   }
 
-  /**
-   * Get verifications by filter
-   */
+  
   async getByFilter(filter: VerificationFilter, limit = 100): Promise<Verification[]> {
     const conditions: string[] = [];
     const params: unknown[] = [];
@@ -140,16 +128,12 @@ export class VerificationStore {
     return rows.map((r) => this.hydrate(r));
   }
 
-  /**
-   * Get contradicted verifications for session
-   */
+  
   async getContradicted(sessionId: string, limit = 50): Promise<Verification[]> {
     return this.getByStatus(sessionId, "contradicted", limit);
   }
 
-  /**
-   * Get verification statistics for session
-   */
+  
   async getStats(sessionId: string): Promise<{
     total: number;
     by_status: Record<VerificationStatus, number>;
@@ -188,9 +172,7 @@ export class VerificationStore {
     };
   }
 
-  /**
-   * Check if claim has been verified
-   */
+  
   async isVerified(claimId: string): Promise<boolean> {
     const rows = await this.db.query<{ count: number }>(
       `SELECT COUNT(*) as count FROM verifications WHERE claim_id = ?`,
@@ -200,9 +182,7 @@ export class VerificationStore {
     return Number(rows[0]?.count ?? 0) > 0;
   }
 
-  /**
-   * Update verification
-   */
+  
   async update(
     verificationId: string,
     updates: Partial<Pick<Verification, "status" | "confidence" | "details">>
@@ -235,18 +215,14 @@ export class VerificationStore {
     );
   }
 
-  /**
-   * Delete verification
-   */
+  
   async delete(verificationId: string): Promise<void> {
     await this.db.execute(`DELETE FROM verifications WHERE verification_id = ?`, [
       verificationId,
     ]);
   }
 
-  /**
-   * Hydrate verification from database row
-   */
+  
   private hydrate(row: Verification): Verification {
     return {
       ...row,

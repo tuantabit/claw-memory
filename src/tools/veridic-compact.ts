@@ -3,11 +3,8 @@ import type { VeridicEngine } from "../engine.js";
 import { VeridicCompactor, type CompactionConfig } from "../compactor/index.js";
 
 export interface CompactInput {
-  /** Number of days to retain (default: from config) */
   retention_days?: number;
-  /** Only show what would be compacted (dry run) */
   dry_run?: boolean;
-  /** Show compaction history */
   history?: boolean;
 }
 
@@ -60,7 +57,7 @@ export function createCompactTool(engine: VeridicEngine) {
     async execute(input: CompactInput): Promise<CompactOutput> {
       try {
         const stores = engine.getStores();
-        const db = stores.claims["db"]; // Access internal database
+        const db = stores.claims["db"];
 
         if (input.history) {
           const compactor = new VeridicCompactor(db);

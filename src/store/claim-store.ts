@@ -12,9 +12,7 @@ import type {
 export class ClaimStore {
   constructor(private db: Database) {}
 
-  /**
-   * Create a new claim
-   */
+  
   async create(
     sessionId: string,
     claimType: ClaimType,
@@ -50,9 +48,7 @@ export class ClaimStore {
     return claim;
   }
 
-  /**
-   * Get claim by ID
-   */
+  
   async getById(claimId: string): Promise<Claim | null> {
     const rows = await this.db.query<Claim>(
       `SELECT * FROM claims WHERE claim_id = ?`,
@@ -64,9 +60,7 @@ export class ClaimStore {
     return this.hydrate(rows[0]);
   }
 
-  /**
-   * Get claims by session
-   */
+  
   async getBySession(
     sessionId: string,
     options?: QueryOptions
@@ -87,9 +81,7 @@ export class ClaimStore {
     return rows.map((r) => this.hydrate(r));
   }
 
-  /**
-   * Get claims by task
-   */
+  
   async getByTask(taskId: string, options?: QueryOptions): Promise<Claim[]> {
     const limit = options?.limit ?? 100;
     const offset = options?.offset ?? 0;
@@ -105,9 +97,7 @@ export class ClaimStore {
     return rows.map((r) => this.hydrate(r));
   }
 
-  /**
-   * Get claims by filter
-   */
+  
   async getByFilter(
     filter: ClaimFilter,
     options?: QueryOptions
@@ -156,9 +146,7 @@ export class ClaimStore {
     return rows.map((r) => this.hydrate(r));
   }
 
-  /**
-   * Get unverified claims
-   */
+  
   async getUnverified(sessionId: string, limit = 50): Promise<Claim[]> {
     const rows = await this.db.query<Claim>(
       `SELECT c.* FROM claims c
@@ -172,9 +160,7 @@ export class ClaimStore {
     return rows.map((r) => this.hydrate(r));
   }
 
-  /**
-   * Get claims by type
-   */
+  
   async getByType(
     sessionId: string,
     claimType: ClaimType,
@@ -191,9 +177,7 @@ export class ClaimStore {
     return rows.map((r) => this.hydrate(r));
   }
 
-  /**
-   * Count claims by session
-   */
+  
   async countBySession(sessionId: string): Promise<number> {
     const rows = await this.db.query<{ count: number }>(
       `SELECT COUNT(*) as count FROM claims WHERE session_id = ?`,
@@ -203,9 +187,7 @@ export class ClaimStore {
     return Number(rows[0]?.count ?? 0);
   }
 
-  /**
-   * Get claim statistics
-   */
+  
   async getStats(sessionId: string): Promise<{
     total: number;
     by_type: Record<string, number>;
@@ -252,9 +234,7 @@ export class ClaimStore {
     };
   }
 
-  /**
-   * Search claims by text (ILIKE - basic search)
-   */
+  
   async search(sessionId: string, query: string, limit = 20): Promise<Claim[]> {
     const rows = await this.db.query<Claim>(
       `SELECT * FROM claims
@@ -267,14 +247,7 @@ export class ClaimStore {
     return rows.map((r) => this.hydrate(r));
   }
 
-  /**
-   * Full-text search using FTS5
-   * Supports advanced query syntax:
-   * - "exact phrase" for phrase matching
-   * - word1 word2 for AND matching
-   * - word1 OR word2 for OR matching
-   * - word* for prefix matching
-   */
+  
   async searchFTS(
     query: string,
     options?: {
@@ -320,9 +293,7 @@ export class ClaimStore {
     return rows.map((r) => this.hydrate(r));
   }
 
-  /**
-   * Get search suggestions based on partial query
-   */
+  
   async getSearchSuggestions(
     prefix: string,
     limit = 10
@@ -340,16 +311,12 @@ export class ClaimStore {
     return rows;
   }
 
-  /**
-   * Delete claim
-   */
+  
   async delete(claimId: string): Promise<void> {
     await this.db.execute(`DELETE FROM claims WHERE claim_id = ?`, [claimId]);
   }
 
-  /**
-   * Hydrate claim from database row
-   */
+  
   private hydrate(row: Claim): Claim {
     return {
       ...row,

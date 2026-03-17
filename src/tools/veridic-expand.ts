@@ -2,9 +2,7 @@
 import type { VeridicEngine } from "../engine.js";
 
 export interface ExpandInput {
-  /** Claim ID to expand */
   claim_id: string;
-  /** Include raw evidence data */
   include_evidence?: boolean;
 }
 

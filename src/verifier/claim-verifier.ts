@@ -47,10 +47,7 @@ export class ClaimVerifier {
     ];
   }
 
-  /**
-   * Verify a single claim
-   * Main entry point (like RetrievalEngine.expand())
-   */
+  
   async verify(claim: Claim): Promise<FullVerificationResult> {
     const collectionResult = await this.collector.collectForClaim(claim);
     const evidence = collectionResult.evidence;
@@ -85,9 +82,7 @@ export class ClaimVerifier {
     };
   }
 
-  /**
-   * Verify multiple claims
-   */
+  
   async verifyAll(claims: Claim[]): Promise<FullVerificationResult[]> {
     const results: FullVerificationResult[] = [];
 
@@ -99,17 +94,13 @@ export class ClaimVerifier {
     return results;
   }
 
-  /**
-   * Verify unverified claims for a session
-   */
+  
   async verifySession(sessionId: string): Promise<FullVerificationResult[]> {
     const unverifiedClaims = await this.stores.claims.getUnverified(sessionId);
     return this.verifyAll(unverifiedClaims);
   }
 
-  /**
-   * Get verification for a claim (like RetrievalEngine.describe())
-   */
+  
   async describe(claimId: string): Promise<{
     claim: Claim | null;
     verification: Verification | null;
@@ -126,9 +117,7 @@ export class ClaimVerifier {
     return { claim, verification, evidence };
   }
 
-  /**
-   * Search claims (like RetrievalEngine.grep())
-   */
+  
   async search(
     sessionId: string,
     query: string
@@ -145,9 +134,7 @@ export class ClaimVerifier {
     return results;
   }
 
-  /**
-   * Get contradicted claims for a session
-   */
+  
   async getContradictions(sessionId: string): Promise<FullVerificationResult[]> {
     const verifications = await this.stores.verifications.getContradicted(sessionId);
     const results: FullVerificationResult[] = [];
@@ -175,9 +162,7 @@ export class ClaimVerifier {
     return results;
   }
 
-  /**
-   * Re-verify a claim (with fresh evidence)
-   */
+  
   async reverify(claimId: string): Promise<FullVerificationResult | null> {
     const claim = await this.stores.claims.getById(claimId);
     if (!claim) return null;
@@ -187,9 +172,7 @@ export class ClaimVerifier {
     return this.verify(claim);
   }
 
-  /**
-   * Get verification statistics
-   */
+  
   async getStats(sessionId: string): Promise<{
     total_claims: number;
     verified: number;
@@ -222,9 +205,7 @@ export class ClaimVerifier {
     };
   }
 
-  /**
-   * Select appropriate strategy for claim type
-   */
+  
   private selectStrategy(claimType: string): VerificationStrategy {
     for (const strategy of this.strategies) {
       if (strategy.handles(claimType)) {

@@ -26,10 +26,7 @@ export class EvidenceCollector {
     this.gitSource = new GitEvidenceSource(cwd);
   }
 
-  /**
-   * Collect all evidence for a claim
-   * Main entry point (like ContextAssembler.assemble())
-   */
+  
   async collectForClaim(claim: Claim): Promise<CollectionResult> {
     const startTime = Date.now();
     const evidence: Evidence[] = [];
@@ -75,9 +72,7 @@ export class EvidenceCollector {
     };
   }
 
-  /**
-   * Collect evidence for multiple claims
-   */
+  
   async collectForClaims(claims: Claim[]): Promise<Map<string, CollectionResult>> {
     const results = new Map<string, CollectionResult>();
 
@@ -96,9 +91,7 @@ export class EvidenceCollector {
     return results;
   }
 
-  /**
-   * Get sources relevant for a claim type
-   */
+  
   private getSourcesForClaimType(
     claimType: ClaimType
   ): Array<"file" | "command" | "tool" | "git"> {
@@ -122,9 +115,7 @@ export class EvidenceCollector {
     return sourceMap[claimType] ?? ["tool"];
   }
 
-  /**
-   * Deduplicate evidence by source_ref
-   */
+  
   private deduplicateEvidence(evidence: Evidence[]): Evidence[] {
     const seen = new Map<string, Evidence>();
 
@@ -140,9 +131,7 @@ export class EvidenceCollector {
     return Array.from(seen.values());
   }
 
-  /**
-   * Get summary of evidence for a claim
-   */
+  
   summarizeEvidence(evidence: Evidence[]): {
     total: number;
     supporting: number;
@@ -172,18 +161,14 @@ export class EvidenceCollector {
     };
   }
 
-  /**
-   * Check if there's sufficient evidence for a claim
-   */
+  
   hasSufficientEvidence(evidence: Evidence[]): boolean {
     if (evidence.length === 0) return false;
 
     return evidence.some((e) => e.confidence >= 0.7);
   }
 
-  /**
-   * Get the strongest evidence (highest confidence supporting)
-   */
+  
   getStrongestEvidence(evidence: Evidence[]): Evidence | null {
     const supporting = evidence.filter((e) => e.supports_claim);
     if (supporting.length === 0) return null;
@@ -193,9 +178,7 @@ export class EvidenceCollector {
     );
   }
 
-  /**
-   * Get the strongest contradicting evidence
-   */
+  
   getStrongestContradiction(evidence: Evidence[]): Evidence | null {
     const contradicting = evidence.filter((e) => !e.supports_claim);
     if (contradicting.length === 0) return null;

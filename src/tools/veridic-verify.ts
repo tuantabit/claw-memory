@@ -2,11 +2,8 @@
 import type { VeridicEngine } from "../engine.js";
 
 export interface VerifyInput {
-  /** Claim ID to verify */
   claim_id?: string;
-  /** Search query to find claims */
   query?: string;
-  /** Verify all unverified claims */
   all?: boolean;
 }
 

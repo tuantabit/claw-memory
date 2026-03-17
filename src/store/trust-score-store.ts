@@ -6,9 +6,7 @@ import type { TrustScore } from "../types.js";
 export class TrustScoreStore {
   constructor(private db: Database) {}
 
-  /**
-   * Create new trust score
-   */
+  
   async create(
     sessionId: string,
     overallScore: number,
@@ -44,9 +42,7 @@ export class TrustScoreStore {
     return score;
   }
 
-  /**
-   * Get latest trust score for session
-   */
+  
   async getLatest(sessionId: string): Promise<TrustScore | null> {
     const rows = await this.db.query<TrustScore>(
       `SELECT * FROM trust_scores
@@ -61,9 +57,7 @@ export class TrustScoreStore {
     return this.hydrate(rows[0]);
   }
 
-  /**
-   * Get trust score history for session
-   */
+  
   async getHistory(sessionId: string, limit = 50): Promise<TrustScore[]> {
     const rows = await this.db.query<TrustScore>(
       `SELECT * FROM trust_scores
@@ -76,9 +70,7 @@ export class TrustScoreStore {
     return rows.map((r) => this.hydrate(r));
   }
 
-  /**
-   * Get score by ID
-   */
+  
   async getById(scoreId: string): Promise<TrustScore | null> {
     const rows = await this.db.query<TrustScore>(
       `SELECT * FROM trust_scores WHERE score_id = ?`,
@@ -90,9 +82,7 @@ export class TrustScoreStore {
     return this.hydrate(rows[0]);
   }
 
-  /**
-   * Get average score for session
-   */
+  
   async getAverageScore(sessionId: string): Promise<number> {
     const rows = await this.db.query<{ avg: number }>(
       `SELECT AVG(overall_score) as avg
@@ -104,9 +94,6 @@ export class TrustScoreStore {
     return Number(rows[0]?.avg ?? 100);
   }
 
-  /**
-   * Get score trend (improvement/decline)
-   */
   async getTrend(
     sessionId: string,
     windowSize = 5
@@ -148,9 +135,7 @@ export class TrustScoreStore {
     return { direction, change, recent_scores: scores };
   }
 
-  /**
-   * Get sessions with low trust scores
-   */
+  
   async getLowScoreSessions(threshold = 50, limit = 20): Promise<
     Array<{
       session_id: string;
@@ -182,18 +167,14 @@ export class TrustScoreStore {
     }));
   }
 
-  /**
-   * Delete scores for session
-   */
+  
   async deleteBySession(sessionId: string): Promise<void> {
     await this.db.execute(`DELETE FROM trust_scores WHERE session_id = ?`, [
       sessionId,
     ]);
   }
 
-  /**
-   * Hydrate trust score from database row
-   */
+  
   private hydrate(row: TrustScore): TrustScore {
     return {
       ...row,

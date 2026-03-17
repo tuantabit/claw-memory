@@ -14,9 +14,7 @@ export interface CommandEvidence {
 export class CommandEvidenceSource {
   constructor(private db: Database) {}
 
-  /**
-   * Collect evidence for a command-related claim
-   */
+  
   async collectForClaim(claim: Claim): Promise<Evidence[]> {
     const evidence: Evidence[] = [];
 
@@ -40,9 +38,7 @@ export class CommandEvidenceSource {
     return evidence;
   }
 
-  /**
-   * Collect evidence for a specific command
-   */
+  
   async collectForCommand(claim: Claim, command: string): Promise<Evidence[]> {
     const evidence: Evidence[] = [];
 
@@ -78,9 +74,7 @@ export class CommandEvidenceSource {
     return evidence;
   }
 
-  /**
-   * Collect evidence specifically for test claims
-   */
+  
   async collectTestEvidence(claim: Claim): Promise<Evidence[]> {
     const evidence: Evidence[] = [];
 
@@ -119,9 +113,7 @@ export class CommandEvidenceSource {
     return evidence;
   }
 
-  /**
-   * Extract commands from text
-   */
+  
   private extractCommandsFromText(text: string): string[] {
     const commands: string[] = [];
 
@@ -152,9 +144,7 @@ export class CommandEvidenceSource {
     return commands;
   }
 
-  /**
-   * Check if text looks like a command
-   */
+  
   private looksLikeCommand(text: string): boolean {
     const commandPrefixes = [
       "npm", "pnpm", "yarn", "node", "npx",
@@ -167,16 +157,12 @@ export class CommandEvidenceSource {
     return commandPrefixes.includes(firstWord ?? "") || text.startsWith("./");
   }
 
-  /**
-   * Normalize command for matching
-   */
+  
   private normalizeCommand(command: string): string {
     return command.split(/\s+/).slice(0, 3).join(" ");
   }
 
-  /**
-   * Evaluate if command receipt supports the claim
-   */
+  
   private evaluateCommandSupport(claim: Claim, receipt: CommandReceipt): boolean {
     switch (claim.claim_type) {
       case "command_executed":
@@ -199,9 +185,7 @@ export class CommandEvidenceSource {
     }
   }
 
-  /**
-   * Evaluate if receipt supports test claim
-   */
+  
   private evaluateTestSupport(claim: Claim, receipt: CommandReceipt): boolean {
     if (claim.claim_type === "test_passed") {
       return receipt.exit_code === 0;
@@ -211,9 +195,7 @@ export class CommandEvidenceSource {
     return false;
   }
 
-  /**
-   * Calculate confidence for command evidence
-   */
+  
   private calculateCommandConfidence(
     claim: Claim,
     receipt: CommandReceipt,
@@ -230,16 +212,14 @@ export class CommandEvidenceSource {
     }
 
     const age = Date.now() - new Date(receipt.created_at).getTime();
-    if (age < 60000) { // Within 1 minute
+    if (age < 60000) {
       confidence += 0.1;
     }
 
     return Math.min(confidence, 1.0);
   }
 
-  /**
-   * Calculate confidence for test evidence
-   */
+  
   private calculateTestConfidence(claim: Claim, receipt: CommandReceipt): number {
     let confidence = 0.7;
 

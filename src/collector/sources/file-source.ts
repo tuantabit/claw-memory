@@ -18,9 +18,7 @@ export interface FileEvidence {
 export class FileEvidenceSource {
   constructor(private db: Database) {}
 
-  /**
-   * Collect evidence for a file-related claim
-   */
+  
   async collectForClaim(claim: Claim): Promise<Evidence[]> {
     const evidence: Evidence[] = [];
 
@@ -41,9 +39,7 @@ export class FileEvidenceSource {
     return evidence;
   }
 
-  /**
-   * Collect evidence from file_receipts table
-   */
+  
   async collectFromReceipts(claim: Claim, filePath: string): Promise<Evidence[]> {
     const evidence: Evidence[] = [];
 
@@ -79,9 +75,7 @@ export class FileEvidenceSource {
     return evidence;
   }
 
-  /**
-   * Collect evidence from live filesystem
-   */
+  
   async collectFromFilesystem(
     claim: Claim,
     filePath: string
@@ -102,9 +96,7 @@ export class FileEvidenceSource {
     };
   }
 
-  /**
-   * Get file information
-   */
+  
   async getFileInfo(filePath: string): Promise<FileEvidence> {
     const pathsToTry = [
       filePath,
@@ -136,9 +128,7 @@ export class FileEvidenceSource {
     return { exists: false, path: filePath };
   }
 
-  /**
-   * Check if file contains specific content
-   */
+  
   async fileContains(filePath: string, searchText: string): Promise<boolean> {
     try {
       const pathsToTry = [filePath, `./${filePath}`, `${process.cwd()}/${filePath}`];
@@ -155,9 +145,7 @@ export class FileEvidenceSource {
     }
   }
 
-  /**
-   * Evaluate if receipt supports the claim
-   */
+  
   private evaluateReceiptSupport(claim: Claim, receipt: FileReceipt): boolean {
     switch (claim.claim_type) {
       case "file_created":
@@ -181,9 +169,7 @@ export class FileEvidenceSource {
     }
   }
 
-  /**
-   * Evaluate if filesystem state supports the claim
-   */
+  
   private evaluateFilesystemSupport(claim: Claim, fileInfo: FileEvidence): boolean {
     switch (claim.claim_type) {
       case "file_created":
@@ -201,9 +187,7 @@ export class FileEvidenceSource {
     }
   }
 
-  /**
-   * Calculate confidence for receipt evidence
-   */
+  
   private calculateReceiptConfidence(claim: Claim, receipt: FileReceipt): number {
     let confidence = 0.7;
 
@@ -213,16 +197,14 @@ export class FileEvidenceSource {
     }
 
     const receiptAge = Date.now() - new Date(receipt.created_at).getTime();
-    if (receiptAge < 60000) { // Within 1 minute
+    if (receiptAge < 60000) {
       confidence += 0.1;
     }
 
     return Math.min(confidence, 1.0);
   }
 
-  /**
-   * Calculate confidence for filesystem evidence
-   */
+  
   private calculateFilesystemConfidence(
     claim: Claim,
     fileInfo: FileEvidence
@@ -234,7 +216,7 @@ export class FileEvidenceSource {
 
       if (fileInfo.modified_at) {
         const age = Date.now() - fileInfo.modified_at.getTime();
-        if (age < 300000) { // Within 5 minutes
+        if (age < 300000) {
           confidence += 0.2;
         }
       }

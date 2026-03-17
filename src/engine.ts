@@ -48,9 +48,7 @@ export class VeridicEngine {
     };
   }
 
-  /**
-   * Initialize the engine
-   */
+  
   async initialize(deps?: VeridicDependencies): Promise<void> {
     if (this.state.initialized) return;
 
@@ -64,18 +62,13 @@ export class VeridicEngine {
     this.log("info", "VeridicEngine initialized");
   }
 
-  /**
-   * Set current session context
-   */
+  
   setSession(sessionId: string, taskId?: string | null): void {
     this.state.currentSessionId = sessionId;
     this.state.currentTaskId = taskId ?? null;
   }
 
-  /**
-   * Process an AI response - extract and verify claims
-   * Main entry point (like LcmContextEngine.ingestMessage())
-   */
+  
   async processResponse(
     response: string,
     responseId?: string | null,
@@ -138,10 +131,7 @@ export class VeridicEngine {
     };
   }
 
-  /**
-   * Get trust context for injection into agent
-   * (like LcmContextEngine.assembleContext())
-   */
+  
   async getTrustContext(sessionId?: string): Promise<TrustContext> {
     const sid = sessionId ?? this.state.currentSessionId;
     if (!sid) {
@@ -178,9 +168,7 @@ export class VeridicEngine {
     };
   }
 
-  /**
-   * Generate full trust report for a session
-   */
+  
   async generateReport(sessionId?: string): Promise<TrustReport> {
     const sid = sessionId ?? this.state.currentSessionId;
     if (!sid) {
@@ -241,16 +229,12 @@ export class VeridicEngine {
     };
   }
 
-  /**
-   * Verify a specific claim
-   */
+  
   async verifyClaim(claimId: string): Promise<FullVerificationResult | null> {
     return this.verifier.reverify(claimId);
   }
 
-  /**
-   * Search claims
-   */
+  
   async searchClaims(query: string, sessionId?: string) {
     const sid = sessionId ?? this.state.currentSessionId;
     if (!sid) return [];
@@ -258,9 +242,7 @@ export class VeridicEngine {
     return this.verifier.search(sid, query);
   }
 
-  /**
-   * Get current trust score
-   */
+  
   async getCurrentScore(sessionId?: string): Promise<number> {
     const sid = sessionId ?? this.state.currentSessionId;
     if (!sid) return 100;
@@ -269,17 +251,13 @@ export class VeridicEngine {
     return latest?.overall_score ?? 100;
   }
 
-  /**
-   * Check if actions should be blocked due to low trust
-   */
+  
   async shouldBlock(sessionId?: string): Promise<boolean> {
     const score = await this.getCurrentScore(sessionId);
     return score < this.config.trustBlockThreshold;
   }
 
-  /**
-   * Calculate and store trust score
-   */
+  
   private async calculateAndStoreTrustScore(sessionId: string): Promise<TrustScore> {
     const stats = await this.verifier.getStats(sessionId);
 
@@ -320,9 +298,7 @@ export class VeridicEngine {
     return trustScore;
   }
 
-  /**
-   * Get severity for a claim type
-   */
+  
   private getSeverity(claimType: ClaimType): "low" | "medium" | "high" | "critical" {
     const severityMap: Record<ClaimType, "low" | "medium" | "high" | "critical"> = {
       file_created: "high",
@@ -344,9 +320,7 @@ export class VeridicEngine {
     return severityMap[claimType] ?? "low";
   }
 
-  /**
-   * Generate warning message
-   */
+  
   private generateWarningMessage(score: number, issues: TrustIssue[]): string {
     const criticalIssues = issues.filter((i) => i.severity === "critical").length;
     const highIssues = issues.filter((i) => i.severity === "high").length;
@@ -365,9 +339,7 @@ export class VeridicEngine {
     return message;
   }
 
-  /**
-   * Generate recommendations based on issues
-   */
+  
   private generateRecommendations(
     stats: { accuracy_rate: number; contradicted: number },
     issues: TrustIssue[]
@@ -401,9 +373,7 @@ export class VeridicEngine {
     return recommendations;
   }
 
-  /**
-   * Log helper
-   */
+  
   private log(level: "debug" | "info" | "warn" | "error", message: string, data?: unknown): void {
     if (this.deps?.log) {
       this.deps.log(level, `[veridic-claw] ${message}`, data);
@@ -413,16 +383,12 @@ export class VeridicEngine {
     }
   }
 
-  /**
-   * Get stores for direct access
-   */
+  
   getStores(): VeridicStores {
     return this.stores;
   }
 
-  /**
-   * Get config
-   */
+  
   getConfig(): VeridicConfig {
     return this.config;
   }

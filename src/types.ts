@@ -160,15 +160,10 @@ export interface LLMApi {
 }
 
 export interface VeridicDependencies {
-  /** LLM API for extraction/verification */
   llmApi?: LLMApi;
-  /** Database instance */
   db: import("./core/database.js").Database;
-  /** Get current session ID */
   getSessionId: () => string | null;
-  /** Get current task ID */
   getTaskId: () => string | null;
-  /** Log function */
   log: (level: "debug" | "info" | "warn" | "error", message: string, data?: unknown) => void;
 }
 

@@ -8,9 +8,7 @@ import type {
 } from "../../types.js";
 
 export class FileVerificationStrategy {
-  /**
-   * Verify a file-related claim
-   */
+  
   verify(input: VerificationInput): VerificationOutput {
     const { claim, evidence } = input;
 
@@ -65,9 +63,7 @@ export class FileVerificationStrategy {
     };
   }
 
-  /**
-   * Build details for verified claim
-   */
+  
   private buildVerificationDetails(claim: Claim, evidence: Evidence[]): string {
     const fileEntities = claim.entities.filter((e) => e.type === "file");
     const files = fileEntities.map((e) => e.value).join(", ");
@@ -87,9 +83,7 @@ export class FileVerificationStrategy {
     }
   }
 
-  /**
-   * Build details for contradicted claim
-   */
+  
   private buildContradictionDetails(claim: Claim, evidence: Evidence[]): string {
     const fileEntities = claim.entities.filter((e) => e.type === "file");
     const files = fileEntities.map((e) => e.value).join(", ");
@@ -109,9 +103,7 @@ export class FileVerificationStrategy {
     }
   }
 
-  /**
-   * Check if this strategy handles the claim type
-   */
+  
   handles(claimType: string): boolean {
     return ["file_created", "file_modified", "file_deleted"].includes(claimType);
   }

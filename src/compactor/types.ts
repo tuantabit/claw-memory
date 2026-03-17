@@ -1,27 +1,11 @@
-
 export interface CompactionConfig {
-  /** Number of days to retain before archiving (default: 30) */
   retentionDays: number;
-
-  /** Preserve contradicted claims (never archive) */
   preserveContradicted: boolean;
-
-  /** Preserve low trust sessions (trust < 50%) */
   preserveLowTrust: boolean;
-
-  /** Run VACUUM after compaction */
   vacuum: boolean;
-
-  /** Rebuild indexes after compaction */
   reindex: boolean;
-
-  /** Run ANALYZE after compaction */
   analyze: boolean;
-
-  /** Enable auto-compaction */
   autoCompact: boolean;
-
-  /** Cron expression for auto-compaction (e.g., "0 2 * * *" for daily at 2am) */
   compactInterval: string;
 }
 
@@ -33,7 +17,7 @@ export const DEFAULT_COMPACTION_CONFIG: CompactionConfig = {
   reindex: false,
   analyze: true,
   autoCompact: false,
-  compactInterval: "0 2 * * *", // Daily at 2am
+  compactInterval: "0 2 * * *",
 };
 
 export interface CompactionReport {

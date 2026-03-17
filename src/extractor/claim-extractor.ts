@@ -18,10 +18,7 @@ export class ClaimExtractor {
     this.config = config;
   }
 
-  /**
-   * Extract claims from AI response text
-   * Main entry point (like CompactionEngine.compact())
-   */
+  
   async extract(
     text: string,
     sessionId: string,
@@ -69,9 +66,7 @@ export class ClaimExtractor {
     };
   }
 
-  /**
-   * Extract claims using regex patterns
-   */
+  
   extractWithRegex(
     text: string,
     sessionId: string,
@@ -113,10 +108,7 @@ export class ClaimExtractor {
     return claims;
   }
 
-  /**
-   * Check if extraction should be performed
-   * (like CompactionEngine.evaluate())
-   */
+  
   shouldExtract(text: string): boolean {
     if (text.length < 20) return false;
 
@@ -133,9 +125,7 @@ export class ClaimExtractor {
     return actionIndicators.some((pattern) => pattern.test(text));
   }
 
-  /**
-   * Merge claims from regex and LLM, preferring higher confidence
-   */
+  
   private mergeClaims(regexClaims: Claim[], llmClaims: Claim[]): Claim[] {
     const merged = new Map<string, Claim>();
 
@@ -156,10 +146,7 @@ export class ClaimExtractor {
     return Array.from(merged.values());
   }
 
-  /**
-   * Consolidate similar claims
-   * (like CompactionEngine.condensedPass())
-   */
+  
   private consolidateClaims(claims: Claim[]): Claim[] {
     const groups = new Map<string, Claim[]>();
 
@@ -181,9 +168,7 @@ export class ClaimExtractor {
     return consolidated;
   }
 
-  /**
-   * Get unique key for claim deduplication
-   */
+  
   private getClaimKey(claim: Claim): string {
     const entityKey = claim.entities
       .map((e) => `${e.type}:${e.normalized ?? e.value}`)
@@ -193,18 +178,14 @@ export class ClaimExtractor {
     return `${claim.claim_type}|${entityKey}`;
   }
 
-  /**
-   * Calculate average confidence of claims
-   */
+  
   private calculateAverageConfidence(claims: Claim[]): number {
     if (claims.length === 0) return 0;
     const sum = claims.reduce((acc, c) => acc + c.confidence, 0);
     return sum / claims.length;
   }
 
-  /**
-   * Quick check for specific claim type in text
-   */
+  
   hasClaimType(text: string, type: ClaimType): boolean {
     const patterns = ALL_PATTERNS.filter((p) => p.type === type);
     return patterns.some((p) => {
@@ -215,9 +196,7 @@ export class ClaimExtractor {
     });
   }
 
-  /**
-   * Extract file paths mentioned in text
-   */
+  
   extractFilePaths(text: string): string[] {
     const filePattern = /[`"']?([^\s`"']+\.\w{1,10})[`"']?/g;
     const paths: string[] = [];
@@ -238,9 +217,7 @@ export class ClaimExtractor {
     return [...new Set(paths)];
   }
 
-  /**
-   * Extract command from text
-   */
+  
   extractCommands(text: string): string[] {
     const commands: string[] = [];
 
