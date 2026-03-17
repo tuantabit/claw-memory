@@ -1,0 +1,261 @@
+/**
+ * File Evidence Source
+ * Collect evidence from file_receipts and filesystem
+ */
+
+import { existsSync } from "node:fs";
+import { readFile, stat } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import type { Database } from "../../core/database.js";
+import type { Evidence, Claim, EvidenceSource, FileReceipt } from "../../types.js";
+import { nanoid } from "nanoid";
+
+export interface FileEvidence {
+  exists: boolean;
+  path: string;
+  hash?: string;
+  size?: number;
+  modified_at?: Date;
+  content_sample?: string;
+}
+
+export class FileEvidenceSource {
+  constructor(private db: Database) {}
+
+  /**
+   * Collect evidence for a file-related claim
+   */
+  async collectForClaim(claim: Claim): Promise<Evidence[]> {
+    const evidence: Evidence[] = [];
+
+    // Get file paths from claim entities
+    const filePaths = claim.entities
+      .filter((e) => e.type === "file")
+      .map((e) => e.normalized ?? e.value);
+
+    for (const filePath of filePaths) {
+      // Evidence from file_receipts
+      const receiptEvidence = await this.collectFromReceipts(claim, filePath);
+      evidence.push(...receiptEvidence);
+
+      // Evidence from live filesystem
+      const fsEvidence = await this.collectFromFilesystem(claim, filePath);
+      if (fsEvidence) {
+        evidence.push(fsEvidence);
+      }
+    }
+
+    return evidence;
+  }
+
+  /**
+   * Collect evidence from file_receipts table
+   */
+  async collectFromReceipts(claim: Claim, filePath: string): Promise<Evidence[]> {
+    const evidence: Evidence[] = [];
+
+    // Find matching file receipts
+    const receipts = await this.db.query<FileReceipt>(
+      `SELECT * FROM file_receipts
+       WHERE file_path LIKE ?
+       ORDER BY created_at DESC
+       LIMIT 10`,
+      [`%${filePath}%`]
+    );
+
+    for (const receipt of receipts) {
+      const supports = this.evaluateReceiptSupport(claim, receipt);
+
+      evidence.push({
+        evidence_id: nanoid(),
+        claim_id: claim.claim_id,
+        source: "file_receipt" as EvidenceSource,
+        source_ref: receipt.receipt_id,
+        data: {
+          file_path: receipt.file_path,
+          before_hash: receipt.before_hash,
+          after_hash: receipt.after_hash,
+          action_id: receipt.action_id,
+          created_at: receipt.created_at,
+        },
+        supports_claim: supports,
+        confidence: this.calculateReceiptConfidence(claim, receipt),
+        collected_at: new Date(),
+      });
+    }
+
+    return evidence;
+  }
+
+  /**
+   * Collect evidence from live filesystem
+   */
+  async collectFromFilesystem(
+    claim: Claim,
+    filePath: string
+  ): Promise<Evidence | null> {
+    const fileInfo = await this.getFileInfo(filePath);
+
+    const supports = this.evaluateFilesystemSupport(claim, fileInfo);
+
+    return {
+      evidence_id: nanoid(),
+      claim_id: claim.claim_id,
+      source: "filesystem" as EvidenceSource,
+      source_ref: filePath,
+      data: fileInfo as unknown as Record<string, unknown>,
+      supports_claim: supports,
+      confidence: this.calculateFilesystemConfidence(claim, fileInfo),
+      collected_at: new Date(),
+    };
+  }
+
+  /**
+   * Get file information
+   */
+  async getFileInfo(filePath: string): Promise<FileEvidence> {
+    // Try multiple path variations
+    const pathsToTry = [
+      filePath,
+      `./${filePath}`,
+      `${process.cwd()}/${filePath}`,
+    ];
+
+    for (const path of pathsToTry) {
+      if (existsSync(path)) {
+        try {
+          const stats = await stat(path);
+          const content = await readFile(path, "utf-8");
+          const hash = createHash("sha256").update(content).digest("hex").slice(0, 16);
+
+          return {
+            exists: true,
+            path,
+            hash,
+            size: stats.size,
+            modified_at: stats.mtime,
+            content_sample: content.slice(0, 500),
+          };
+        } catch {
+          return { exists: true, path };
+        }
+      }
+    }
+
+    return { exists: false, path: filePath };
+  }
+
+  /**
+   * Check if file contains specific content
+   */
+  async fileContains(filePath: string, searchText: string): Promise<boolean> {
+    try {
+      const pathsToTry = [filePath, `./${filePath}`, `${process.cwd()}/${filePath}`];
+
+      for (const path of pathsToTry) {
+        if (existsSync(path)) {
+          const content = await readFile(path, "utf-8");
+          return content.includes(searchText);
+        }
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Evaluate if receipt supports the claim
+   */
+  private evaluateReceiptSupport(claim: Claim, receipt: FileReceipt): boolean {
+    switch (claim.claim_type) {
+      case "file_created":
+        // File was created if before_hash was NOT_EXIST or NEW_FILE
+        return (
+          receipt.before_hash === "NOT_EXIST" ||
+          receipt.before_hash === "NEW_FILE"
+        );
+
+      case "file_modified":
+        // File was modified if hashes differ and file existed before
+        return (
+          receipt.before_hash !== receipt.after_hash &&
+          receipt.before_hash !== "NOT_EXIST" &&
+          receipt.before_hash !== "NEW_FILE"
+        );
+
+      case "file_deleted":
+        // File was deleted if after_hash is NOT_EXIST
+        return receipt.after_hash === "NOT_EXIST";
+
+      default:
+        // For other claims, check if file was touched
+        return receipt.before_hash !== receipt.after_hash;
+    }
+  }
+
+  /**
+   * Evaluate if filesystem state supports the claim
+   */
+  private evaluateFilesystemSupport(claim: Claim, fileInfo: FileEvidence): boolean {
+    switch (claim.claim_type) {
+      case "file_created":
+      case "file_modified":
+      case "code_added":
+      case "code_fixed":
+        return fileInfo.exists;
+
+      case "file_deleted":
+      case "code_removed":
+        return !fileInfo.exists;
+
+      default:
+        return fileInfo.exists;
+    }
+  }
+
+  /**
+   * Calculate confidence for receipt evidence
+   */
+  private calculateReceiptConfidence(claim: Claim, receipt: FileReceipt): number {
+    let confidence = 0.7;
+
+    // Higher confidence if file path matches exactly
+    const claimPath = claim.entities.find((e) => e.type === "file")?.value;
+    if (claimPath && receipt.file_path.endsWith(claimPath)) {
+      confidence += 0.2;
+    }
+
+    // Higher confidence for recent receipts
+    const receiptAge = Date.now() - new Date(receipt.created_at).getTime();
+    if (receiptAge < 60000) { // Within 1 minute
+      confidence += 0.1;
+    }
+
+    return Math.min(confidence, 1.0);
+  }
+
+  /**
+   * Calculate confidence for filesystem evidence
+   */
+  private calculateFilesystemConfidence(
+    claim: Claim,
+    fileInfo: FileEvidence
+  ): number {
+    let confidence = 0.6;
+
+    if (fileInfo.exists) {
+      confidence += 0.2;
+
+      // Higher confidence if file was recently modified
+      if (fileInfo.modified_at) {
+        const age = Date.now() - fileInfo.modified_at.getTime();
+        if (age < 300000) { // Within 5 minutes
+          confidence += 0.2;
+        }
+      }
+    }
+
+    return Math.min(confidence, 1.0);
+  }
+}

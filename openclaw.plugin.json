@@ -1,0 +1,48 @@
+{
+  "id": "veridic-claw",
+  "kind": "verification",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enableLLM": {
+        "type": "boolean",
+        "default": true,
+        "description": "Enable LLM-based claim extraction when regex confidence is low"
+      },
+      "extractionThreshold": {
+        "type": "number",
+        "default": 0.6,
+        "minimum": 0,
+        "maximum": 1,
+        "description": "Minimum confidence for regex extraction before falling back to LLM"
+      },
+      "verificationThreshold": {
+        "type": "number",
+        "default": 0.7,
+        "minimum": 0,
+        "maximum": 1,
+        "description": "Minimum confidence to mark claim as verified"
+      },
+      "trustWarningThreshold": {
+        "type": "number",
+        "default": 70,
+        "minimum": 0,
+        "maximum": 100,
+        "description": "Trust score below which to show warning"
+      },
+      "trustBlockThreshold": {
+        "type": "number",
+        "default": 30,
+        "minimum": 0,
+        "maximum": 100,
+        "description": "Trust score below which to block actions"
+      },
+      "autoVerify": {
+        "type": "boolean",
+        "default": true,
+        "description": "Automatically verify claims after each response"
+      }
+    }
+  }
+}
