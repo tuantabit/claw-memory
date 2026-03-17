@@ -7,6 +7,7 @@ Claim verification plugin for [OpenClaw](https://github.com/openclaw/openclaw). 
 - [What it does](#what-it-does)
 - [Quick start](#quick-start)
 - [Configuration](#configuration)
+- [Terminal UI (veridic-tui)](#terminal-ui-veridic-tui)
 - [Documentation](#documentation)
 - [Development](#development)
 - [License](#license)
@@ -202,6 +203,58 @@ Veridic-claw extracts and verifies the following claim types:
 | `config_changed` | "I updated the config" | Check config file |
 | `task_completed` | "Done with the task" | Verify task completion |
 
+## Terminal UI (veridic-tui)
+
+A standalone Go-based terminal UI for inspecting the Veridic-Claw database. Read-only inspection of claims, evidence, verifications, and trust scores.
+
+### Features
+
+- **Session Browser**: View all verification sessions with trust scores
+- **Claims List**: Browse claims with type, confidence, and status
+- **Evidence Viewer**: Inspect collected evidence for each claim
+- **Verification DAG**: View verification history as a directed acyclic graph
+- **Trust Score Dashboard**: Monitor trust score trends over time
+- **Search**: Full-text search across all claims
+
+### Installation
+
+From source:
+
+```bash
+cd tui
+make build
+./veridic-tui
+```
+
+From release:
+
+Download the binary for your platform from the [releases page](https://github.com/tuantabit/veridic-claw/releases).
+
+### Usage
+
+```bash
+# Use default database (~/.openclaw/veridic-claw.db)
+veridic-tui
+
+# Use specific database
+veridic-tui -db /path/to/veridic-claw.db
+```
+
+### Keyboard shortcuts
+
+| Key | Action |
+|-----|--------|
+| `q` | Quit |
+| `↑` / `k` | Move up |
+| `↓` / `j` | Move down |
+| `Enter` | Select / Expand |
+| `Esc` | Go back |
+| `t` | View trust scores |
+| `e` | View evidence |
+| `v` | View verifications |
+
+See [tui/README.md](tui/README.md) for full documentation.
+
 ## Documentation
 
 - [Architecture](docs/architecture.md)
@@ -229,7 +282,7 @@ pnpm test
 ### Project structure
 
 ```
-src/
+src/                        # TypeScript plugin source
   index.ts                  # Plugin entry point and exports
   engine.ts                 # VeridicEngine — main verification engine
   plugin.ts                 # OpenClaw plugin integration
@@ -272,10 +325,18 @@ src/
     veridic-expand.ts       # veridic_expand tool
     veridic-score.ts        # veridic_score tool
     index.ts                # Tool exports
+tui/                        # Go terminal UI
+  main.go                   # TUI entry point (bubbletea)
+  data.go                   # SQLite queries
+  views.go                  # UI views (lipgloss)
+  go.mod                    # Go module
+  Makefile                  # Build automation
+  README.md                 # TUI documentation
 openclaw.plugin.json        # Plugin manifest with config schema
 package.json                # Package configuration
 tsconfig.json               # TypeScript configuration
 vitest.config.ts            # Test configuration
+.goreleaser.yml             # Release automation for TUI
 ```
 
 ## License

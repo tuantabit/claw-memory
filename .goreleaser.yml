@@ -1,0 +1,58 @@
+version: 2
+
+project_name: veridic-tui
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: veridic-tui
+    dir: tui
+    binary: veridic-tui
+    env:
+      - CGO_ENABLED=1
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+archives:
+  - id: veridic-tui
+    builds:
+      - veridic-tui
+    format: tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
+
+release:
+  github:
+    owner: tuantabit
+    name: veridic-claw
+  draft: false
+  prerelease: auto
+  name_template: "veridic-tui v{{ .Version }}"

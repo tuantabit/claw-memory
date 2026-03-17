@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS evidence (
 );
 
 -- Verifications: Results of claim verification
--- Similar to summary_dag in lossless-claw
+-- DAG structure similar to summary_dag in lossless-claw
 CREATE TABLE IF NOT EXISTS verifications (
     verification_id VARCHAR PRIMARY KEY,
     claim_id VARCHAR NOT NULL,
@@ -40,6 +40,9 @@ CREATE TABLE IF NOT EXISTS verifications (
     evidence_ids JSON,
     confidence DOUBLE NOT NULL,
     details TEXT,
+    -- DAG columns for verification history
+    parent_verification_id VARCHAR,
+    depth INTEGER DEFAULT 0,
     verified_at TIMESTAMP DEFAULT current_timestamp
 );
 
@@ -67,6 +70,8 @@ CREATE INDEX IF NOT EXISTS idx_evidence_source ON evidence(source);
 
 CREATE INDEX IF NOT EXISTS idx_verifications_claim ON verifications(claim_id);
 CREATE INDEX IF NOT EXISTS idx_verifications_status ON verifications(status);
+CREATE INDEX IF NOT EXISTS idx_verifications_parent ON verifications(parent_verification_id);
+CREATE INDEX IF NOT EXISTS idx_verifications_depth ON verifications(depth);
 
 CREATE INDEX IF NOT EXISTS idx_trust_scores_session ON trust_scores(session_id);
 CREATE INDEX IF NOT EXISTS idx_trust_scores_calculated ON trust_scores(calculated_at);

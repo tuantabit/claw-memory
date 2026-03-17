@@ -3,3 +3,8 @@ dist/
 *.tsbuildinfo
 .DS_Store
 .worktrees
+
+# Go build artifacts
+tui/veridic-tui
+tui/veridic-tui-*
+*.exe
