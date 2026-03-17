@@ -195,8 +195,12 @@ Veridic-claw extracts and verifies the following claim types:
 | `test_passed` | "All tests pass" | Re-run tests |
 | `test_failed` | "Test X fails" | Re-run tests |
 | `code_added` | "I added function foo()" | Check code exists |
+| `code_removed` | "I removed unused code" | Check code doesn't exist |
 | `code_fixed` | "I fixed the bug" | Verify fix works |
+| `error_fixed` | "I fixed the error" | Verify error resolved |
 | `dependency_added` | "I added lodash" | Check package.json |
+| `config_changed` | "I updated the config" | Check config file |
+| `task_completed` | "Done with the task" | Verify task completion |
 
 ## Documentation
 
@@ -212,24 +216,21 @@ Veridic-claw extracts and verifies the following claim types:
 # Install dependencies
 pnpm install
 
-# Run tests
-pnpm test
-
 # Type check
 pnpm typecheck
 
 # Build
 pnpm build
 
-# Run a specific test file
-pnpm test -- tests/extractor.test.ts
+# Run tests (via vitest)
+pnpm test
 ```
 
 ### Project structure
 
 ```
-index.ts                    # Plugin entry point and exports
 src/
+  index.ts                  # Plugin entry point and exports
   engine.ts                 # VeridicEngine — main verification engine
   plugin.ts                 # OpenClaw plugin integration
   schema.ts                 # Database schema initialization
@@ -240,12 +241,14 @@ src/
     index.ts                # Core exports
   extractor/
     claim-extractor.ts      # Claim extraction from text
+    llm-extractor.ts        # LLM-based claim extraction
     patterns.ts             # Regex patterns for claim detection
     index.ts                # Extractor exports
   store/
     claim-store.ts          # Claim persistence
     evidence-store.ts       # Evidence persistence
     verification-store.ts   # Verification result persistence
+    trust-score-store.ts    # Trust score persistence
     index.ts                # Store exports
   collector/
     evidence-collector.ts   # Evidence collection orchestration
@@ -253,13 +256,15 @@ src/
       file-source.ts        # Filesystem evidence
       git-source.ts         # Git history evidence
       command-source.ts     # Command output evidence
+      tool-source.ts        # Tool call evidence
     index.ts                # Collector exports
   verifier/
     claim-verifier.ts       # Claim verification orchestration
     strategies/
       file-strategy.ts      # File claim verification
       command-strategy.ts   # Command claim verification
-      test-strategy.ts      # Test claim verification
+      code-strategy.ts      # Code claim verification
+      completion-strategy.ts # Task completion verification
     index.ts                # Verifier exports
   tools/
     veridic-verify.ts       # veridic_verify tool
@@ -268,6 +273,9 @@ src/
     veridic-score.ts        # veridic_score tool
     index.ts                # Tool exports
 openclaw.plugin.json        # Plugin manifest with config schema
+package.json                # Package configuration
+tsconfig.json               # TypeScript configuration
+vitest.config.ts            # Test configuration
 ```
 
 ## License
