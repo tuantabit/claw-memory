@@ -1,3 +1,12 @@
+/**
+ * VeridicEngine - Main verification engine for Claw Memory
+ *
+ * This engine orchestrates the entire verification pipeline:
+ * 1. Extract claims from agent responses
+ * 2. Collect evidence from multiple sources
+ * 3. Verify claims against evidence
+ * 4. Calculate and track trust scores
+ */
 
 import type { Database } from "./core/database.js";
 import type {
@@ -18,12 +27,30 @@ import { createClaimExtractor, ClaimExtractor } from "./extractor/index.js";
 import { createEvidenceCollector, EvidenceCollector } from "./collector/index.js";
 import { createClaimVerifier, ClaimVerifier, FullVerificationResult } from "./verifier/index.js";
 
+/**
+ * Internal state of the engine
+ */
 interface EngineState {
   initialized: boolean;
   currentSessionId: string | null;
   currentTaskId: string | null;
 }
 
+/**
+ * Main verification engine class
+ *
+ * @example
+ * ```typescript
+ * const db = createDatabase(":memory:");
+ * const engine = new VeridicEngine(db);
+ * await engine.initialize();
+ *
+ * engine.setSession("session-123");
+ * const result = await engine.processResponse("I created file.ts");
+ * console.log(result.claims);
+ * console.log(result.trustScore);
+ * ```
+ */
 export class VeridicEngine {
   private db: Database;
   private config: VeridicConfig;
@@ -48,7 +75,10 @@ export class VeridicEngine {
     };
   }
 
-  
+  /**
+   * Initialize the engine and database schema
+   * Must be called before processing responses
+   */
   async initialize(deps?: VeridicDependencies): Promise<void> {
     if (this.state.initialized) return;
 
@@ -62,13 +92,23 @@ export class VeridicEngine {
     this.log("info", "VeridicEngine initialized");
   }
 
-  
+  /**
+   * Set the current session and task context
+   * All subsequent operations will use this context
+   */
   setSession(sessionId: string, taskId?: string | null): void {
     this.state.currentSessionId = sessionId;
     this.state.currentTaskId = taskId ?? null;
   }
 
-  
+  /**
+   * Process an agent response to extract, verify claims, and update trust score
+   *
+   * @param response - The agent's response text
+   * @param responseId - Optional ID for the response
+   * @param llmApi - Optional LLM API for hybrid extraction
+   * @returns Claims, verifications, and updated trust score
+   */
   async processResponse(
     response: string,
     responseId?: string | null,
@@ -84,11 +124,13 @@ export class VeridicEngine {
       return { claims: [], verifications: [], trustScore: null };
     }
 
+    // Check if response contains actionable claims
     if (!this.extractor.shouldExtract(response)) {
       this.log("debug", "Response does not contain actionable claims");
       return { claims: [], verifications: [], trustScore: null };
     }
 
+    // Extract claims using regex and optionally LLM
     const extractionResult = await this.extractor.extract(
       response,
       sessionId,
@@ -99,6 +141,7 @@ export class VeridicEngine {
 
     this.log("info", `Extracted ${extractionResult.claims.length} claims`);
 
+    // Store extracted claims
     const storedClaims: Claim[] = [];
     for (const claim of extractionResult.claims) {
       const stored = await this.stores.claims.create(
@@ -113,12 +156,14 @@ export class VeridicEngine {
       storedClaims.push(stored);
     }
 
+    // Auto-verify if enabled
     let verifications: FullVerificationResult[] = [];
     if (this.config.autoVerify && storedClaims.length > 0) {
       verifications = await this.verifier.verifyAll(storedClaims);
       this.log("info", `Verified ${verifications.length} claims`);
     }
 
+    // Calculate and store trust score
     let trustScore: TrustScore | null = null;
     if (storedClaims.length > 0) {
       trustScore = await this.calculateAndStoreTrustScore(sessionId);
@@ -131,7 +176,9 @@ export class VeridicEngine {
     };
   }
 
-  
+  /**
+   * Get current trust context including score and recent issues
+   */
   async getTrustContext(sessionId?: string): Promise<TrustContext> {
     const sid = sessionId ?? this.state.currentSessionId;
     if (!sid) {
@@ -145,6 +192,7 @@ export class VeridicEngine {
     const latestScore = await this.stores.trustScores.getLatest(sid);
     const score = latestScore?.overall_score ?? 100;
 
+    // Get recent contradictions as issues
     const contradictions = await this.verifier.getContradictions(sid);
     const recentIssues: TrustIssue[] = contradictions.slice(0, 5).map((c) => ({
       claim_id: c.claim.claim_id,
@@ -155,6 +203,7 @@ export class VeridicEngine {
       details: c.verification.details,
     }));
 
+    // Generate warning if score is below threshold
     let warningMessage: string | undefined;
     if (score < this.config.trustWarningThreshold) {
       warningMessage = this.generateWarningMessage(score, recentIssues);
@@ -168,7 +217,9 @@ export class VeridicEngine {
     };
   }
 
-  
+  /**
+   * Generate a full trust report for a session
+   */
   async generateReport(sessionId?: string): Promise<TrustReport> {
     const sid = sessionId ?? this.state.currentSessionId;
     if (!sid) {
@@ -181,6 +232,7 @@ export class VeridicEngine {
 
     const claimStats = await this.stores.claims.getStats(sid);
 
+    // Build category breakdown
     const categoryBreakdown: Record<ClaimType, { total: number; verified: number; contradicted: number }> = {} as Record<ClaimType, { total: number; verified: number; contradicted: number }>;
 
     for (const [type, count] of Object.entries(claimStats.by_type)) {
@@ -201,6 +253,7 @@ export class VeridicEngine {
       };
     }
 
+    // Build issues list
     const issues: TrustIssue[] = contradictions.map((c) => ({
       claim_id: c.claim.claim_id,
       claim_type: c.claim.claim_type,
@@ -229,12 +282,16 @@ export class VeridicEngine {
     };
   }
 
-  
+  /**
+   * Manually verify or re-verify a specific claim
+   */
   async verifyClaim(claimId: string): Promise<FullVerificationResult | null> {
     return this.verifier.reverify(claimId);
   }
 
-  
+  /**
+   * Search claims by query string
+   */
   async searchClaims(query: string, sessionId?: string) {
     const sid = sessionId ?? this.state.currentSessionId;
     if (!sid) return [];
@@ -242,7 +299,9 @@ export class VeridicEngine {
     return this.verifier.search(sid, query);
   }
 
-  
+  /**
+   * Get the current trust score (0-100)
+   */
   async getCurrentScore(sessionId?: string): Promise<number> {
     const sid = sessionId ?? this.state.currentSessionId;
     if (!sid) return 100;
@@ -251,28 +310,37 @@ export class VeridicEngine {
     return latest?.overall_score ?? 100;
   }
 
-  
+  /**
+   * Check if the agent should be blocked due to low trust
+   */
   async shouldBlock(sessionId?: string): Promise<boolean> {
     const score = await this.getCurrentScore(sessionId);
     return score < this.config.trustBlockThreshold;
   }
 
-  
+  /**
+   * Calculate trust score based on verification statistics
+   * Score = 100 - contradiction_penalty - unverified_penalty + verified_bonus
+   */
   private async calculateAndStoreTrustScore(sessionId: string): Promise<TrustScore> {
     const stats = await this.verifier.getStats(sessionId);
 
     let overallScore = 100;
 
     if (stats.total_claims > 0) {
+      // Penalty for contradictions (up to 50 points)
       const contradictionPenalty = (stats.contradicted / stats.total_claims) * 50;
 
+      // Penalty for unverified claims (up to 20 points)
       const unverifiedPenalty = (stats.unverified / stats.total_claims) * 20;
 
+      // Bonus for verified claims (up to 10 points)
       const verifiedBonus = (stats.verified / stats.total_claims) * 10;
 
       overallScore = Math.max(0, Math.min(100, 100 - contradictionPenalty - unverifiedPenalty + verifiedBonus));
     }
 
+    // Calculate category-weighted scores
     const categoryScores: Record<string, number> = {};
     const claimStats = await this.stores.claims.getStats(sessionId);
 
@@ -298,7 +366,9 @@ export class VeridicEngine {
     return trustScore;
   }
 
-  
+  /**
+   * Map claim type to severity level
+   */
   private getSeverity(claimType: ClaimType): "low" | "medium" | "high" | "critical" {
     const severityMap: Record<ClaimType, "low" | "medium" | "high" | "critical"> = {
       file_created: "high",
@@ -320,7 +390,9 @@ export class VeridicEngine {
     return severityMap[claimType] ?? "low";
   }
 
-  
+  /**
+   * Generate warning message for low trust score
+   */
   private generateWarningMessage(score: number, issues: TrustIssue[]): string {
     const criticalIssues = issues.filter((i) => i.severity === "critical").length;
     const highIssues = issues.filter((i) => i.severity === "high").length;
@@ -339,7 +411,9 @@ export class VeridicEngine {
     return message;
   }
 
-  
+  /**
+   * Generate actionable recommendations based on issues
+   */
   private generateRecommendations(
     stats: { accuracy_rate: number; contradicted: number },
     issues: TrustIssue[]
@@ -373,7 +447,9 @@ export class VeridicEngine {
     return recommendations;
   }
 
-  
+  /**
+   * Internal logging helper
+   */
   private log(level: "debug" | "info" | "warn" | "error", message: string, data?: unknown): void {
     if (this.deps?.log) {
       this.deps.log(level, `[veridic-claw] ${message}`, data);
@@ -383,17 +459,24 @@ export class VeridicEngine {
     }
   }
 
-  
+  /**
+   * Get access to internal stores for advanced usage
+   */
   getStores(): VeridicStores {
     return this.stores;
   }
 
-  
+  /**
+   * Get current configuration
+   */
   getConfig(): VeridicConfig {
     return this.config;
   }
 }
 
+/**
+ * Factory function to create a VeridicEngine instance
+ */
 export function createVeridicEngine(
   db: Database,
   config?: Partial<VeridicConfig>

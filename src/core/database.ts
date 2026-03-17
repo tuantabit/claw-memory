@@ -1,19 +1,47 @@
-import { DatabaseSync } from "node:sqlite";
+/**
+ * SQLite database adapter using Node.js built-in sqlite module
+ *
+ * Requires Node.js 22.5.0+ for the node:sqlite module
+ */
 
-type SqlValue = string | number | bigint | Buffer | null;
+import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
+/** SQLite-compatible value types */
+type SqlValue = string | number | bigint | Buffer | null;
+
+/**
+ * Database interface for persistence operations
+ */
 export interface Database {
+  /** Execute a SQL statement (INSERT, UPDATE, DELETE, CREATE, etc.) */
   execute(sql: string, params?: unknown[]): Promise<void>;
+
+  /** Query rows from the database */
   query<T>(sql: string, params?: unknown[]): Promise<T[]>;
+
+  /** Insert a record into a table */
   insert<T extends Record<string, unknown>>(
     table: string,
     data: Partial<T>
   ): Promise<void>;
+
+  /** Close the database connection */
   close(): Promise<void>;
 }
 
+/**
+ * SQLite database implementation using node:sqlite
+ *
+ * @example
+ * ```typescript
+ * const db = new SQLiteDatabase(":memory:");
+ * await db.execute("CREATE TABLE test (id INTEGER PRIMARY KEY)");
+ * await db.insert("test", { id: 1 });
+ * const rows = await db.query("SELECT * FROM test");
+ * ```
+ */
 export class SQLiteDatabase implements Database {
   private db: DatabaseSync | null = null;
   private dbPath: string;
@@ -22,13 +50,23 @@ export class SQLiteDatabase implements Database {
     this.dbPath = dbPath;
   }
 
+  /**
+   * Get or create the database connection
+   * Creates parent directories if needed
+   */
   private getDb(): DatabaseSync {
     if (!this.db) {
+      // Create parent directories for file-based databases
       if (this.dbPath !== ":memory:") {
         mkdirSync(dirname(this.dbPath), { recursive: true });
       }
+
       this.db = new DatabaseSync(this.dbPath);
+
+      // Enable WAL mode for better concurrent access
       this.db.exec("PRAGMA journal_mode = WAL");
+
+      // Enable foreign key constraints
       this.db.exec("PRAGMA foreign_keys = ON");
     }
     return this.db;
@@ -71,10 +109,16 @@ export class SQLiteDatabase implements Database {
   }
 }
 
+/**
+ * Factory function to create a database instance
+ */
 export function createDatabase(dbPath: string): Database {
   return new SQLiteDatabase(dbPath);
 }
 
+/**
+ * Get the default database path (~/.openclaw/veridic-claw.db)
+ */
 export function getDefaultDbPath(): string {
   const homeDir = process.env.HOME ?? process.env.USERPROFILE ?? ".";
   return `${homeDir}/.openclaw/veridic-claw.db`;

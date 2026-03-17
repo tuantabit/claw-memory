@@ -1,3 +1,13 @@
+/**
+ * Claw Memory - Claim verification for AI agents
+ *
+ * This module provides tools to extract claims from AI agent responses,
+ * collect evidence, and verify claims against reality.
+ *
+ * @module claw-memory
+ */
+
+// Core types
 export type {
   Claim,
   ClaimType,
@@ -22,8 +32,10 @@ export type {
   VerificationFilter,
 } from "./types.js";
 
+// Configuration
 export { resolveConfig, getConfigFromEnv, DEFAULT_CONFIG } from "./config.js";
 
+// Database
 export {
   type Database,
   SQLiteDatabase,
@@ -31,10 +43,13 @@ export {
   getDefaultDbPath,
 } from "./core/index.js";
 
+// Schema
 export { VERIDIC_SCHEMA, initVeridicSchema } from "./schema.js";
 
+// Main engine
 export { VeridicEngine, createVeridicEngine } from "./engine.js";
 
+// Data stores
 export {
   ClaimStore,
   EvidenceStore,
@@ -44,6 +59,7 @@ export {
   type VeridicStores,
 } from "./store/index.js";
 
+// Claim extraction
 export {
   ClaimExtractor,
   createClaimExtractor,
@@ -55,6 +71,7 @@ export {
   TEST_PATTERNS,
 } from "./extractor/index.js";
 
+// Evidence collection
 export {
   EvidenceCollector,
   createEvidenceCollector,
@@ -65,6 +82,7 @@ export {
   type CollectionResult,
 } from "./collector/index.js";
 
+// Claim verification
 export {
   ClaimVerifier,
   createClaimVerifier,
@@ -75,6 +93,7 @@ export {
   type FullVerificationResult,
 } from "./verifier/index.js";
 
+// Agent tools
 export {
   createVeridicTools,
   createVerifyTool,
@@ -85,8 +104,10 @@ export {
   type ToolDefinition,
 } from "./tools/index.js";
 
+// Plugin
 export { createVeridicPlugin } from "./plugin.js";
 
+// Context management (Lossless integration)
 export {
   LosslessBridge,
   createLosslessBridge,
@@ -96,6 +117,7 @@ export {
   DEFAULT_LOSSLESS_BRIDGE_CONFIG,
 } from "./context/index.js";
 
+// Shared utilities (ClawMemory integration)
 export {
   SharedDatabaseAdapter,
   createSharedDatabaseAdapter,
@@ -113,6 +135,7 @@ export {
   type UnifiedContext,
 } from "./shared/index.js";
 
+// Receipt-based verification
 export {
   ReceiptSource,
   createReceiptSource,
@@ -125,5 +148,6 @@ export {
   type ReceiptStrategyConfig,
 } from "./verifier/strategies/receipt-strategy.js";
 
+// Default export
 import { createVeridicPlugin } from "./plugin.js";
 export default createVeridicPlugin;

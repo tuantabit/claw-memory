@@ -1,7 +1,12 @@
+/**
+ * Core type definitions for Claw Memory
+ */
 
 export type { VeridicConfig } from "./config.js";
 
-
+/**
+ * Types of claims that can be extracted from agent responses
+ */
 export type ClaimType =
   | "file_created"
   | "file_modified"
@@ -18,12 +23,18 @@ export type ClaimType =
   | "task_completed"
   | "unknown";
 
+/**
+ * Status of a claim verification
+ */
 export type VerificationStatus =
   | "verified"
   | "unverified"
   | "contradicted"
   | "insufficient_evidence";
 
+/**
+ * Sources from which evidence can be collected
+ */
 export type EvidenceSource =
   | "file_receipt"
   | "command_receipt"
@@ -32,12 +43,18 @@ export type EvidenceSource =
   | "tool_call"
   | "code_content";
 
+/**
+ * Entity referenced in a claim (file, function, command, etc.)
+ */
 export interface ClaimEntity {
   type: "file" | "function" | "class" | "component" | "command" | "package" | "test" | "error";
   value: string;
   normalized?: string;
 }
 
+/**
+ * A claim extracted from an agent response
+ */
 export interface Claim {
   claim_id: string;
   session_id: string;
@@ -50,6 +67,9 @@ export interface Claim {
   created_at: Date;
 }
 
+/**
+ * Evidence collected to verify a claim
+ */
 export interface Evidence {
   evidence_id: string;
   claim_id: string;
@@ -61,6 +81,9 @@ export interface Evidence {
   collected_at: Date;
 }
 
+/**
+ * Result of verifying a claim against evidence
+ */
 export interface Verification {
   verification_id: string;
   claim_id: string;
@@ -71,6 +94,9 @@ export interface Verification {
   verified_at: Date;
 }
 
+/**
+ * Trust score for a session based on verification history
+ */
 export interface TrustScore {
   score_id: string;
   session_id: string;
@@ -83,7 +109,9 @@ export interface TrustScore {
   calculated_at: Date;
 }
 
-
+/**
+ * Current trust context for a session
+ */
 export interface TrustContext {
   session_id: string;
   current_score: number;
@@ -91,6 +119,9 @@ export interface TrustContext {
   warning_message?: string;
 }
 
+/**
+ * An issue that affects trust score
+ */
 export interface TrustIssue {
   claim_id: string;
   claim_type: ClaimType;
@@ -100,6 +131,9 @@ export interface TrustIssue {
   details: string;
 }
 
+/**
+ * Full trust report for a session
+ */
 export interface TrustReport {
   session_id: string;
   generated_at: Date;
@@ -120,7 +154,9 @@ export interface TrustReport {
   recommendations: string[];
 }
 
-
+/**
+ * Pattern for extracting claims from text
+ */
 export interface ClaimPattern {
   pattern: RegExp;
   type: ClaimType;
@@ -128,6 +164,9 @@ export interface ClaimPattern {
   entityGroups?: { index: number; type: ClaimEntity["type"] }[];
 }
 
+/**
+ * Result of claim extraction
+ */
 export interface ExtractionResult {
   claims: Claim[];
   text_length: number;
@@ -135,12 +174,17 @@ export interface ExtractionResult {
   method: "regex" | "llm" | "hybrid";
 }
 
-
+/**
+ * Input for verification process
+ */
 export interface VerificationInput {
   claim: Claim;
   evidence: Evidence[];
 }
 
+/**
+ * Output from verification process
+ */
 export interface VerificationOutput {
   status: VerificationStatus;
   confidence: number;
@@ -149,7 +193,9 @@ export interface VerificationOutput {
   contradicting_evidence: string[];
 }
 
-
+/**
+ * LLM API interface for claim extraction
+ */
 export interface LLMApi {
   complete: (params: {
     model?: string;
@@ -159,6 +205,9 @@ export interface LLMApi {
   }) => Promise<{ content: string }>;
 }
 
+/**
+ * Dependencies required by VeridicEngine
+ */
 export interface VeridicDependencies {
   llmApi?: LLMApi;
   db: import("./core/database.js").Database;
@@ -167,7 +216,9 @@ export interface VeridicDependencies {
   log: (level: "debug" | "info" | "warn" | "error", message: string, data?: unknown) => void;
 }
 
-
+/**
+ * Options for querying data
+ */
 export interface QueryOptions {
   limit?: number;
   offset?: number;
@@ -175,6 +226,9 @@ export interface QueryOptions {
   orderDir?: "asc" | "desc";
 }
 
+/**
+ * Filter for querying claims
+ */
 export interface ClaimFilter {
   session_id?: string;
   task_id?: string;
@@ -183,13 +237,18 @@ export interface ClaimFilter {
   min_confidence?: number;
 }
 
+/**
+ * Filter for querying verifications
+ */
 export interface VerificationFilter {
   claim_id?: string;
   status?: VerificationStatus;
   min_confidence?: number;
 }
 
-
+/**
+ * File receipt from ClawMemory (tracks file changes)
+ */
 export interface FileReceipt {
   receipt_id: string;
   action_id: string;
@@ -199,6 +258,9 @@ export interface FileReceipt {
   created_at: Date;
 }
 
+/**
+ * Command receipt from ClawMemory (tracks command execution)
+ */
 export interface CommandReceipt {
   receipt_id: string;
   action_id: string;
@@ -209,6 +271,9 @@ export interface CommandReceipt {
   created_at: Date;
 }
 
+/**
+ * Action record from ClawMemory (tracks tool calls)
+ */
 export interface Action {
   action_id: string;
   session_id: string;
