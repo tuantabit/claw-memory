@@ -186,7 +186,6 @@ export async function initVeridicSchema(
   try {
     await db.execute(FTS_SCHEMA);
   } catch {
-    // FTS5 not available in this SQLite build - search will use LIKE fallback
   }
 }
 
@@ -196,6 +195,5 @@ export async function rebuildFTSIndex(
   try {
     await db.execute(FTS_REBUILD);
   } catch {
-    // FTS5 not available - skip rebuild
   }
 }

@@ -73,7 +73,6 @@ export class FileEvidenceSource {
         });
       }
     } catch {
-      // ClawMemory tables not available - skip receipt-based evidence
     }
 
     return evidence;

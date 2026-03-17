@@ -1,15 +1,19 @@
 # veridic-claw
 
-Claim verification plugin for [OpenClaw](https://github.com/openclaw/openclaw). Extracts factual claims from agent responses, collects evidence, and verifies them against reality. Don't trust. Verify.
+Claim verification extension for [OpenClaw](https://github.com/openclaw/openclaw). Extracts factual claims from agent responses, collects evidence, and verifies them against reality. Don't trust. Verify.
 
 ## Table of contents
 
 - [What it does](#what-it-does)
 - [Quick start](#quick-start)
 - [Configuration](#configuration)
+- [Agent tools](#agent-tools)
+- [Claim types](#claim-types)
+- [Evidence sources](#evidence-sources)
+- [Compaction](#compaction)
 - [Terminal UI (veridic-tui)](#terminal-ui-veridic-tui)
-- [Documentation](#documentation)
 - [Development](#development)
+- [Project structure](#project-structure)
 - [License](#license)
 
 ## What it does
@@ -17,10 +21,11 @@ Claim verification plugin for [OpenClaw](https://github.com/openclaw/openclaw). 
 When an AI agent makes claims about actions it performed (files created, tests passed, commands executed), those claims may not always match reality. Veridic-claw:
 
 1. **Extracts claims** from agent responses using regex patterns and optional LLM analysis
-2. **Collects evidence** from multiple sources (filesystem, git, command outputs)
+2. **Collects evidence** from multiple sources (filesystem, git, command receipts, tool calls)
 3. **Verifies claims** against collected evidence using configurable strategies
 4. **Calculates trust scores** based on verification history
-5. **Provides tools** (`veridic_verify`, `veridic_audit`, `veridic_expand`, `veridic_score`) for manual verification
+5. **Compacts old data** with configurable retention and archiving
+6. **Provides tools** for manual verification and auditing
 
 Claims are persisted in SQLite. Evidence links back to source claims. Agents can query their verification history and trust scores.
 
@@ -30,114 +35,79 @@ Claims are persisted in SQLite. Evidence links back to source claims. Agents can
 
 ### Prerequisites
 
-- OpenClaw with plugin support
-- Node.js 22+
-- An LLM provider configured in OpenClaw (optional, for hybrid extraction)
+- Node.js **22.5.0+** (uses built-in `node:sqlite` module)
+- OpenClaw with extension support
 
-### Install the plugin
-
-Use OpenClaw's plugin installer (recommended):
+### Install
 
 ```bash
-openclaw plugins install @openclaw/veridic-claw
-```
+# Clone the repository
+git clone https://github.com/tuantabit/veridic-claw.git
+cd veridic-claw
 
-If you're running from a local OpenClaw checkout, use:
+# Install dependencies
+pnpm install
 
-```bash
-pnpm openclaw plugins install @openclaw/veridic-claw
-```
-
-For local plugin development, link your working copy instead of copying files:
-
-```bash
-openclaw plugins install --link /path/to/veridic-claw
-# or from a local OpenClaw checkout:
-# pnpm openclaw plugins install --link /path/to/veridic-claw
+# Build
+pnpm build
 ```
 
 ### Configure OpenClaw
 
-In most cases, no manual JSON edits are needed after `openclaw plugins install`.
-
-If you need to set it manually:
+Add veridic-claw as an extension in your OpenClaw configuration:
 
 ```json
 {
-  "plugins": {
-    "entries": {
-      "veridic-claw": {
-        "enabled": true,
-        "config": {
-          "autoVerify": true,
-          "verificationThreshold": 0.7
-        }
-      }
-    }
+  "openclaw": {
+    "extensions": ["./path/to/veridic-claw/dist/index.js"]
   }
 }
 ```
-
-Restart OpenClaw after configuration changes.
 
 ## Configuration
 
-Veridic-claw is configured through plugin config in your OpenClaw settings.
-
-### Plugin config
-
-Add a `veridic-claw` entry under `plugins.entries` in your OpenClaw config:
-
-```json
-{
-  "plugins": {
-    "entries": {
-      "veridic-claw": {
-        "enabled": true,
-        "config": {
-          "enableLLM": true,
-          "extractionThreshold": 0.6,
-          "verificationThreshold": 0.7,
-          "trustWarningThreshold": 70,
-          "trustBlockThreshold": 30,
-          "autoVerify": true
-        }
-      }
-    }
-  }
-}
-```
+Veridic-claw supports configuration via environment variables or programmatic config.
 
 ### Configuration options
 
 | Option | Default | Description |
 |--------|---------|-------------|
 | `enableLLM` | `true` | Enable LLM-based claim extraction when regex confidence is low |
-| `extractionThreshold` | `0.6` | Minimum confidence for regex extraction before falling back to LLM (0.0–1.0) |
-| `verificationThreshold` | `0.7` | Minimum confidence to mark a claim as verified (0.0–1.0) |
+| `extractionThreshold` | `0.6` | Minimum confidence for regex extraction before falling back to LLM |
+| `verificationThreshold` | `0.7` | Minimum confidence to mark a claim as verified |
 | `trustWarningThreshold` | `70` | Trust score below which to show a warning (0–100) |
 | `trustBlockThreshold` | `30` | Trust score below which to block actions (0–100) |
 | `autoVerify` | `true` | Automatically verify claims after each agent response |
+| `enableRealtime` | `true` | Enable real-time verification |
+| `maxClaimsPerSession` | `1000` | Maximum claims to track per session |
 
-### Recommended starting configuration
+### Environment variables
 
-```json
-{
-  "enableLLM": true,
-  "extractionThreshold": 0.6,
-  "verificationThreshold": 0.7,
-  "autoVerify": true
-}
+```bash
+VERIDIC_ENABLE_LLM=true
+VERIDIC_EXTRACTION_THRESHOLD=0.6
+VERIDIC_VERIFICATION_THRESHOLD=0.7
+VERIDIC_WARNING_THRESHOLD=70
+VERIDIC_BLOCK_THRESHOLD=30
+VERIDIC_REALTIME=true
+VERIDIC_AUTO_VERIFY=true
 ```
 
-- **enableLLM=true** uses LLM for complex claims that regex patterns miss
-- **extractionThreshold=0.6** falls back to LLM when regex confidence is below 60%
-- **verificationThreshold=0.7** requires 70% confidence to mark claims as verified
-- **autoVerify=true** automatically verifies claims after each response
+### Compaction configuration
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `retentionDays` | `30` | Days to retain claims before archiving |
+| `preserveContradicted` | `true` | Never archive contradicted claims |
+| `preserveLowTrust` | `true` | Never archive low trust sessions |
+| `autoCompact` | `false` | Enable automatic compaction |
+| `compactInterval` | `0 2 * * *` | Cron expression for auto-compaction |
+| `vacuum` | `true` | Run VACUUM after compaction |
+| `analyze` | `true` | Run ANALYZE after compaction |
 
 ## Agent tools
 
-Veridic-claw provides four tools for agents to interact with the verification system:
+Veridic-claw provides five tools for agents to interact with the verification system:
 
 ### veridic_verify
 
@@ -173,71 +143,94 @@ await veridic_expand({ claimId: "claim_abc123" })
 
 ### veridic_score
 
-Get the current trust score for an agent or session.
+Get the current trust score for a session.
 
 ```typescript
 // Get trust score for current session
 await veridic_score({})
 
-// Get trust score for specific agent
-await veridic_score({ agentId: "agent_xyz" })
+// Get trust score for specific session
+await veridic_score({ sessionId: "session_xyz" })
+```
+
+### veridic_compact
+
+Manually trigger database compaction.
+
+```typescript
+// Compact with default settings
+await veridic_compact({})
+
+// Compact with custom retention
+await veridic_compact({ retentionDays: 7 })
 ```
 
 ## Claim types
 
 Veridic-claw extracts and verifies the following claim types:
 
-| Claim Type | Example | Verification Method |
-|------------|---------|---------------------|
-| `file_created` | "I created src/index.ts" | Check file exists |
-| `file_modified` | "I updated package.json" | Check file mtime, git diff |
-| `file_deleted` | "I removed old.ts" | Check file doesn't exist |
-| `command_executed` | "I ran npm install" | Check command output |
-| `test_passed` | "All tests pass" | Re-run tests |
-| `test_failed` | "Test X fails" | Re-run tests |
-| `code_added` | "I added function foo()" | Check code exists |
-| `code_removed` | "I removed unused code" | Check code doesn't exist |
-| `code_fixed` | "I fixed the bug" | Verify fix works |
-| `error_fixed` | "I fixed the error" | Verify error resolved |
-| `dependency_added` | "I added lodash" | Check package.json |
-| `config_changed` | "I updated the config" | Check config file |
-| `task_completed` | "Done with the task" | Verify task completion |
+| Claim Type | Example | Verification Strategy |
+|------------|---------|----------------------|
+| `file_created` | "I created src/index.ts" | File existence + receipt |
+| `file_modified` | "I updated package.json" | File hash change + receipt |
+| `file_deleted` | "I removed old.ts" | File non-existence |
+| `code_added` | "I added function foo()" | Code content search |
+| `code_removed` | "I removed unused code" | Code absence verification |
+| `code_fixed` | "I fixed the bug" | Code change + test result |
+| `command_executed` | "I ran npm install" | Command receipt |
+| `test_passed` | "All tests pass" | Exit code = 0 |
+| `test_failed` | "Test X fails" | Exit code ≠ 0 |
+| `error_fixed` | "I fixed the error" | Error resolution verification |
+| `dependency_added` | "I added lodash" | Package.json check |
+| `config_changed` | "I updated the config" | Config file change |
+| `task_completed` | "Done with the task" | Task completion verification |
+
+## Evidence sources
+
+Evidence is collected from multiple sources:
+
+| Source | Description |
+|--------|-------------|
+| `file_receipt` | File hash before/after from ClawMemory |
+| `command_receipt` | Command exit code, stdout from ClawMemory |
+| `filesystem` | Direct file existence, size, mtime checks |
+| `git_diff` | Git history and diff analysis |
+| `tool_call` | Tool input/output from agent actions |
+| `code_content` | Code pattern matching in files |
+
+## Compaction
+
+Veridic-claw includes a compaction system to manage database size:
+
+- **Archive**: Move old claims/evidence to archive tables
+- **Aggregate**: Create daily summaries from archived data
+- **Cleanup**: Remove orphaned data
+- **Optimize**: VACUUM and ANALYZE database
+
+Contradicted claims are preserved by default to maintain accountability history.
 
 ## Terminal UI (veridic-tui)
 
-A standalone Go-based terminal UI for inspecting the Veridic-Claw database. Read-only inspection of claims, evidence, verifications, and trust scores.
+A standalone Go-based terminal UI for inspecting the Veridic-Claw database.
 
 ### Features
 
-- **Session Browser**: View all verification sessions with trust scores
-- **Claims List**: Browse claims with type, confidence, and status
-- **Evidence Viewer**: Inspect collected evidence for each claim
-- **Verification DAG**: View verification history as a directed acyclic graph
-- **Trust Score Dashboard**: Monitor trust score trends over time
-- **Search**: Full-text search across all claims
+- Session browser with trust scores
+- Claims list with type, confidence, and status
+- Evidence viewer for each claim
+- Trust score dashboard
+- Search across all claims
+- Export to JSON, Markdown, CSV
 
-### Installation
-
-From source:
+### Build and run
 
 ```bash
 cd tui
 make build
 ./veridic-tui
-```
-
-From release:
-
-Download the binary for your platform from the [releases page](https://github.com/tuantabit/veridic-claw/releases).
-
-### Usage
-
-```bash
-# Use default database (~/.openclaw/veridic-claw.db)
-veridic-tui
 
 # Use specific database
-veridic-tui -db /path/to/veridic-claw.db
+./veridic-tui -db /path/to/veridic-claw.db
 ```
 
 ### Keyboard shortcuts
@@ -245,23 +238,14 @@ veridic-tui -db /path/to/veridic-claw.db
 | Key | Action |
 |-----|--------|
 | `q` | Quit |
-| `↑` / `k` | Move up |
-| `↓` / `j` | Move down |
+| `↑/k` | Move up |
+| `↓/j` | Move down |
 | `Enter` | Select / Expand |
 | `Esc` | Go back |
 | `t` | View trust scores |
 | `e` | View evidence |
-| `v` | View verifications |
-
-See [tui/README.md](tui/README.md) for full documentation.
-
-## Documentation
-
-- [Architecture](docs/architecture.md)
-- [Claim extraction](docs/extraction.md)
-- [Evidence collection](docs/evidence.md)
-- [Verification strategies](docs/verification.md)
-- [Trust scoring](docs/trust-scoring.md)
+| `s` | Search |
+| `x` | Export |
 
 ## Development
 
@@ -275,69 +259,96 @@ pnpm typecheck
 # Build
 pnpm build
 
-# Run tests (via vitest)
-pnpm test
+# Watch mode
+pnpm dev
+
+# Clean
+pnpm clean
 ```
 
-### Project structure
+## Project structure
 
 ```
-src/                        # TypeScript plugin source
-  index.ts                  # Plugin entry point and exports
-  engine.ts                 # VeridicEngine — main verification engine
-  plugin.ts                 # OpenClaw plugin integration
-  schema.ts                 # Database schema initialization
-  config.ts                 # VeridicConfig type and defaults
-  types.ts                  # Core type definitions
-  core/
-    database.ts             # SQLite database interface
-    index.ts                # Core exports
-  extractor/
-    claim-extractor.ts      # Claim extraction from text
-    llm-extractor.ts        # LLM-based claim extraction
-    patterns.ts             # Regex patterns for claim detection
-    index.ts                # Extractor exports
-  store/
-    claim-store.ts          # Claim persistence
-    evidence-store.ts       # Evidence persistence
-    verification-store.ts   # Verification result persistence
-    trust-score-store.ts    # Trust score persistence
-    index.ts                # Store exports
-  collector/
-    evidence-collector.ts   # Evidence collection orchestration
-    sources/
-      file-source.ts        # Filesystem evidence
-      git-source.ts         # Git history evidence
-      command-source.ts     # Command output evidence
-      tool-source.ts        # Tool call evidence
-    index.ts                # Collector exports
-  verifier/
-    claim-verifier.ts       # Claim verification orchestration
-    strategies/
-      file-strategy.ts      # File claim verification
-      command-strategy.ts   # Command claim verification
-      code-strategy.ts      # Code claim verification
-      completion-strategy.ts # Task completion verification
-    index.ts                # Verifier exports
-  tools/
-    veridic-verify.ts       # veridic_verify tool
-    veridic-audit.ts        # veridic_audit tool
-    veridic-expand.ts       # veridic_expand tool
-    veridic-score.ts        # veridic_score tool
-    index.ts                # Tool exports
-tui/                        # Go terminal UI
-  main.go                   # TUI entry point (bubbletea)
-  data.go                   # SQLite queries
-  views.go                  # UI views (lipgloss)
-  go.mod                    # Go module
-  Makefile                  # Build automation
-  README.md                 # TUI documentation
-openclaw.plugin.json        # Plugin manifest with config schema
-package.json                # Package configuration
-tsconfig.json               # TypeScript configuration
-vitest.config.ts            # Test configuration
-.goreleaser.yml             # Release automation for TUI
+src/
+├── index.ts                 # Extension entry point and exports
+├── engine.ts                # VeridicEngine — main verification engine
+├── plugin.ts                # OpenClaw extension integration
+├── schema.ts                # Database schema initialization
+├── config.ts                # VeridicConfig type and defaults
+├── types.ts                 # Core type definitions
+├── core/
+│   └── database.ts          # SQLite database (node:sqlite)
+├── extractor/
+│   ├── claim-extractor.ts   # Claim extraction from text
+│   ├── llm-extractor.ts     # LLM-based claim extraction
+│   └── patterns.ts          # Regex patterns for claim detection
+├── store/
+│   ├── claim-store.ts       # Claim persistence
+│   ├── evidence-store.ts    # Evidence persistence
+│   ├── verification-store.ts # Verification result persistence
+│   └── trust-score-store.ts # Trust score persistence
+├── collector/
+│   ├── evidence-collector.ts # Evidence collection orchestration
+│   └── sources/
+│       ├── file-source.ts    # Filesystem evidence
+│       ├── git-source.ts     # Git history evidence
+│       ├── command-source.ts # Command receipt evidence
+│       ├── tool-source.ts    # Tool call evidence
+│       └── receipt-source.ts # ClawMemory receipt evidence
+├── verifier/
+│   ├── claim-verifier.ts    # Claim verification orchestration
+│   └── strategies/
+│       ├── file-strategy.ts      # File claim verification
+│       ├── command-strategy.ts   # Command claim verification
+│       ├── code-strategy.ts      # Code claim verification
+│       ├── completion-strategy.ts # Task completion verification
+│       └── receipt-strategy.ts   # Receipt-based verification
+├── compactor/
+│   ├── compactor.ts         # Database compaction logic
+│   └── types.ts             # Compaction types and config
+├── shared/
+│   ├── database-adapter.ts  # Unified database adapter
+│   ├── memory-bridge.ts     # ClawMemory integration
+│   ├── unified-assembler.ts # Context assembly
+│   └── lossless-bridge.ts   # Lossless-Claw integration
+├── context/
+│   └── lossless-bridge.ts   # Context engine bridge
+└── tools/
+    ├── veridic-verify.ts    # veridic_verify tool
+    ├── veridic-audit.ts     # veridic_audit tool
+    ├── veridic-expand.ts    # veridic_expand tool
+    ├── veridic-score.ts     # veridic_score tool
+    └── veridic-compact.ts   # veridic_compact tool
+
+tui/                         # Go terminal UI
+├── main.go                  # TUI entry point (bubbletea)
+├── data.go                  # SQLite queries
+├── views.go                 # UI views (lipgloss)
+├── export.go                # Export functionality
+├── go.mod                   # Go module
+├── Makefile                 # Build automation
+└── README.md                # TUI documentation
 ```
+
+## Database
+
+Veridic-claw uses Node.js built-in SQLite module (`node:sqlite`, available from v22.5.0+).
+
+Database location: `~/.openclaw/veridic-claw.db`
+
+### Main tables
+
+- `claims` — Extracted claims with type, confidence, entities
+- `evidence` — Collected evidence linked to claims
+- `verifications` — Verification results with status and confidence
+- `trust_scores` — Trust score history per session
+
+### Archive tables
+
+- `claims_archive` — Archived old claims
+- `evidence_archive` — Archived old evidence
+- `daily_summaries` — Aggregated daily statistics
+- `compaction_history` — Compaction run history
 
 ## License
 

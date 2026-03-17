@@ -82,7 +82,6 @@ export class ToolEvidenceSource {
         });
       }
     } catch {
-      // ClawMemory tables not available - skip tool-based evidence
     }
 
     return evidence;
@@ -126,7 +125,6 @@ export class ToolEvidenceSource {
         });
       }
     } catch {
-      // ClawMemory tables not available - skip entity-based evidence
     }
 
     return evidence;

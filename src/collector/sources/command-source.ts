@@ -72,13 +72,12 @@ export class CommandEvidenceSource {
         });
       }
     } catch {
-      // ClawMemory tables not available - skip receipt-based evidence
     }
 
     return evidence;
   }
 
-  
+
   async collectTestEvidence(claim: Claim): Promise<Evidence[]> {
     const evidence: Evidence[] = [];
 
@@ -115,7 +114,6 @@ export class CommandEvidenceSource {
         });
       }
     } catch {
-      // ClawMemory tables not available - skip test evidence
     }
 
     return evidence;
