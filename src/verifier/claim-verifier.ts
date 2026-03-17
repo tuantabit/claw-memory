@@ -1,3 +1,15 @@
+/**
+ * Claim Verifier - Verify claims against evidence
+ *
+ * This module orchestrates the verification process:
+ * 1. Collect evidence from multiple sources (filesystem, git, command receipts)
+ * 2. Select appropriate verification strategy based on claim type
+ * 3. Apply strategy to determine if claim is verified/contradicted/unverified
+ * 4. Store verification results
+ *
+ * Each claim type has a specialized strategy (file, command, code, completion).
+ * The default strategy handles unknown claim types with generic evidence weighting.
+ */
 
 import type { Database } from "../core/database.js";
 import type {
@@ -16,11 +28,21 @@ import { CommandVerificationStrategy } from "./strategies/command-strategy.js";
 import { CodeVerificationStrategy } from "./strategies/code-strategy.js";
 import { CompletionVerificationStrategy } from "./strategies/completion-strategy.js";
 
+/**
+ * Strategy interface for claim verification
+ * Each strategy handles specific claim types with specialized logic
+ */
 interface VerificationStrategy {
+  /** Verify a claim against collected evidence */
   verify(input: VerificationInput): VerificationOutput;
+
+  /** Check if this strategy handles the given claim type */
   handles(claimType: string): boolean;
 }
 
+/**
+ * Complete result of a verification including all related data
+ */
 export interface FullVerificationResult {
   claim: Claim;
   verification: Verification;
@@ -28,6 +50,24 @@ export interface FullVerificationResult {
   output: VerificationOutput;
 }
 
+/**
+ * Verifies claims against collected evidence
+ *
+ * @example
+ * ```typescript
+ * const verifier = new ClaimVerifier(db, config);
+ *
+ * // Verify a single claim
+ * const result = await verifier.verify(claim);
+ * console.log(result.verification.status); // "verified" | "contradicted" | "unverified"
+ *
+ * // Verify all claims in a session
+ * const results = await verifier.verifySession("session-123");
+ *
+ * // Get contradictions for review
+ * const contradictions = await verifier.getContradictions("session-123");
+ * ```
+ */
 export class ClaimVerifier {
   private stores: VeridicStores;
   private collector: EvidenceCollector;
@@ -39,6 +79,7 @@ export class ClaimVerifier {
     this.collector = createEvidenceCollector(db, cwd);
     this.config = config;
 
+    // Register verification strategies in priority order
     this.strategies = [
       new FileVerificationStrategy(),
       new CommandVerificationStrategy(),
@@ -47,11 +88,22 @@ export class ClaimVerifier {
     ];
   }
 
-  
+  /**
+   * Verify a single claim
+   *
+   * Process:
+   * 1. Collect evidence from all sources
+   * 2. Store evidence in database
+   * 3. Select appropriate verification strategy
+   * 4. Run verification
+   * 5. Store and return result
+   */
   async verify(claim: Claim): Promise<FullVerificationResult> {
+    // Step 1: Collect evidence from multiple sources
     const collectionResult = await this.collector.collectForClaim(claim);
     const evidence = collectionResult.evidence;
 
+    // Step 2: Store evidence
     for (const e of evidence) {
       await this.stores.evidence.create(
         e.claim_id,
@@ -63,9 +115,11 @@ export class ClaimVerifier {
       );
     }
 
+    // Step 3-4: Select strategy and verify
     const strategy = this.selectStrategy(claim.claim_type);
     const output = strategy.verify({ claim, evidence });
 
+    // Step 5: Store verification result
     const verification = await this.stores.verifications.create(
       claim.claim_id,
       output.status,
@@ -82,7 +136,9 @@ export class ClaimVerifier {
     };
   }
 
-  
+  /**
+   * Verify multiple claims
+   */
   async verifyAll(claims: Claim[]): Promise<FullVerificationResult[]> {
     const results: FullVerificationResult[] = [];
 
@@ -94,13 +150,17 @@ export class ClaimVerifier {
     return results;
   }
 
-  
+  /**
+   * Verify all unverified claims in a session
+   */
   async verifySession(sessionId: string): Promise<FullVerificationResult[]> {
     const unverifiedClaims = await this.stores.claims.getUnverified(sessionId);
     return this.verifyAll(unverifiedClaims);
   }
 
-  
+  /**
+   * Get full details about a claim including verification and evidence
+   */
   async describe(claimId: string): Promise<{
     claim: Claim | null;
     verification: Verification | null;
@@ -117,7 +177,9 @@ export class ClaimVerifier {
     return { claim, verification, evidence };
   }
 
-  
+  /**
+   * Search claims by text query
+   */
   async search(
     sessionId: string,
     query: string
@@ -134,7 +196,10 @@ export class ClaimVerifier {
     return results;
   }
 
-  
+  /**
+   * Get all contradicted claims for a session
+   * These are claims that were proven false
+   */
   async getContradictions(sessionId: string): Promise<FullVerificationResult[]> {
     const verifications = await this.stores.verifications.getContradicted(sessionId);
     const results: FullVerificationResult[] = [];
@@ -162,17 +227,22 @@ export class ClaimVerifier {
     return results;
   }
 
-  
+  /**
+   * Re-verify a claim (clears old evidence and verifies again)
+   */
   async reverify(claimId: string): Promise<FullVerificationResult | null> {
     const claim = await this.stores.claims.getById(claimId);
     if (!claim) return null;
 
+    // Clear old evidence
     await this.stores.evidence.deleteByClaimId(claimId);
 
     return this.verify(claim);
   }
 
-  
+  /**
+   * Get verification statistics for a session
+   */
   async getStats(sessionId: string): Promise<{
     total_claims: number;
     verified: number;
@@ -191,7 +261,11 @@ export class ClaimVerifier {
     const insufficient = verificationStats.by_status.insufficient_evidence ?? 0;
 
     const total = claimStats.total;
+
+    // How many claims have been processed
     const verificationRate = total > 0 ? (verified + contradicted) / total : 0;
+
+    // Of processed claims, how many were verified (not contradicted)
     const accuracyRate = verified + contradicted > 0 ? verified / (verified + contradicted) : 1;
 
     return {
@@ -205,19 +279,25 @@ export class ClaimVerifier {
     };
   }
 
-  
+  /**
+   * Select the appropriate verification strategy for a claim type
+   * Falls back to a generic evidence-weighting strategy if no specific strategy matches
+   */
   private selectStrategy(claimType: string): VerificationStrategy {
+    // Check registered strategies in order
     for (const strategy of this.strategies) {
       if (strategy.handles(claimType)) {
         return strategy;
       }
     }
 
+    // Default: generic evidence weighting strategy
     return {
       verify: (input: VerificationInput): VerificationOutput => {
         const supporting = input.evidence.filter((e) => e.supports_claim);
         const contradicting = input.evidence.filter((e) => !e.supports_claim);
 
+        // No evidence at all
         if (supporting.length === 0 && contradicting.length === 0) {
           return {
             status: "insufficient_evidence",
@@ -228,9 +308,11 @@ export class ClaimVerifier {
           };
         }
 
+        // Weight evidence by confidence
         const supportWeight = supporting.reduce((s, e) => s + e.confidence, 0);
         const contradictWeight = contradicting.reduce((s, e) => s + e.confidence, 0);
 
+        // Determine status based on evidence weights
         let status: VerificationStatus;
         if (contradictWeight > supportWeight) {
           status = "contradicted";
@@ -253,6 +335,9 @@ export class ClaimVerifier {
   }
 }
 
+/**
+ * Factory function to create a ClaimVerifier
+ */
 export function createClaimVerifier(
   db: Database,
   config: VeridicConfig,

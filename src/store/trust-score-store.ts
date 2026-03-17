@@ -1,12 +1,59 @@
+/**
+ * Trust Score Store - Persistence layer for agent trust scores
+ *
+ * This store tracks trust scores over time:
+ * - Each verification cycle generates a new trust score
+ * - Scores range from 0 (no trust) to 100 (full trust)
+ * - Historical scores enable trend analysis
+ * - Category scores show trust by claim type
+ *
+ * Trust scoring considers:
+ * - Verified claims (positive impact)
+ * - Contradicted claims (strong negative impact)
+ * - Unverified claims (slight negative impact)
+ */
 
 import { nanoid } from "nanoid";
 import type { Database } from "../core/database.js";
 import type { TrustScore } from "../types.js";
 
+/**
+ * Store for managing trust score history
+ *
+ * @example
+ * ```typescript
+ * const store = new TrustScoreStore(db);
+ *
+ * // Record a new trust score
+ * const score = await store.create(
+ *   sessionId,
+ *   85.0,  // overall score
+ *   { file_created: 90, command_executed: 80 },  // by category
+ *   10, 8, 1, 1  // total, verified, contradicted, unverified
+ * );
+ *
+ * // Query trust data
+ * const latest = await store.getLatest(sessionId);
+ * const trend = await store.getTrend(sessionId);
+ * ```
+ */
 export class TrustScoreStore {
   constructor(private db: Database) {}
 
-  
+  /**
+   * Create a new trust score record
+   *
+   * Called after each verification cycle to record current trust level.
+   *
+   * @param sessionId - Session this score belongs to
+   * @param overallScore - Overall trust score (0-100)
+   * @param categoryScores - Score breakdown by claim type
+   * @param totalClaims - Total number of claims processed
+   * @param verifiedClaims - Number of verified claims
+   * @param contradictedClaims - Number of contradicted claims
+   * @param unverifiedClaims - Number of unverified claims
+   * @returns The created trust score record
+   */
   async create(
     sessionId: string,
     overallScore: number,
@@ -42,7 +89,12 @@ export class TrustScoreStore {
     return score;
   }
 
-  
+  /**
+   * Get the most recent trust score for a session
+   *
+   * @param sessionId - Session to query
+   * @returns Latest trust score or null if none exists
+   */
   async getLatest(sessionId: string): Promise<TrustScore | null> {
     const rows = await this.db.query<TrustScore>(
       `SELECT * FROM trust_scores
@@ -57,7 +109,15 @@ export class TrustScoreStore {
     return this.hydrate(rows[0]);
   }
 
-  
+  /**
+   * Get trust score history for a session
+   *
+   * Returns scores in reverse chronological order.
+   *
+   * @param sessionId - Session to query
+   * @param limit - Maximum scores to return
+   * @returns Array of historical trust scores
+   */
   async getHistory(sessionId: string, limit = 50): Promise<TrustScore[]> {
     const rows = await this.db.query<TrustScore>(
       `SELECT * FROM trust_scores
@@ -70,7 +130,12 @@ export class TrustScoreStore {
     return rows.map((r) => this.hydrate(r));
   }
 
-  
+  /**
+   * Get a trust score by its unique ID
+   *
+   * @param scoreId - Score ID to look up
+   * @returns The trust score if found, null otherwise
+   */
   async getById(scoreId: string): Promise<TrustScore | null> {
     const rows = await this.db.query<TrustScore>(
       `SELECT * FROM trust_scores WHERE score_id = ?`,
@@ -82,7 +147,14 @@ export class TrustScoreStore {
     return this.hydrate(rows[0]);
   }
 
-  
+  /**
+   * Get the average trust score for a session
+   *
+   * Averages all historical scores.
+   *
+   * @param sessionId - Session to query
+   * @returns Average score (defaults to 100 if no scores)
+   */
   async getAverageScore(sessionId: string): Promise<number> {
     const rows = await this.db.query<{ avg: number }>(
       `SELECT AVG(overall_score) as avg
@@ -94,6 +166,16 @@ export class TrustScoreStore {
     return Number(rows[0]?.avg ?? 100);
   }
 
+  /**
+   * Analyze trust score trend over recent scores
+   *
+   * Compares the latest score to scores from the window period
+   * to determine if trust is improving, declining, or stable.
+   *
+   * @param sessionId - Session to analyze
+   * @param windowSize - Number of recent scores to consider
+   * @returns Trend direction, change amount, and recent score values
+   */
   async getTrend(
     sessionId: string,
     windowSize = 5
@@ -135,7 +217,17 @@ export class TrustScoreStore {
     return { direction, change, recent_scores: scores };
   }
 
-  
+  /**
+   * Find sessions with low trust scores
+   *
+   * Returns sessions where the latest trust score is below
+   * the specified threshold. Useful for identifying agents
+   * that need attention.
+   *
+   * @param threshold - Score threshold (sessions below this are returned)
+   * @param limit - Maximum sessions to return
+   * @returns Array of low-trust sessions with scores and timestamps
+   */
   async getLowScoreSessions(threshold = 50, limit = 20): Promise<
     Array<{
       session_id: string;
@@ -167,14 +259,27 @@ export class TrustScoreStore {
     }));
   }
 
-  
+  /**
+   * Delete all trust scores for a session
+   *
+   * Used when cleaning up session data.
+   *
+   * @param sessionId - Session to delete scores for
+   */
   async deleteBySession(sessionId: string): Promise<void> {
     await this.db.execute(`DELETE FROM trust_scores WHERE session_id = ?`, [
       sessionId,
     ]);
   }
 
-  
+  /**
+   * Hydrate a database row into a TrustScore object
+   *
+   * Parses JSON fields and converts timestamps.
+   *
+   * @param row - Raw database row
+   * @returns Properly typed TrustScore object
+   */
   private hydrate(row: TrustScore): TrustScore {
     return {
       ...row,

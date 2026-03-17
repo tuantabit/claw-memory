@@ -1,3 +1,30 @@
+/**
+ * Database Schema for Veridic-Claw
+ *
+ * This module defines all database tables used by the verification system:
+ *
+ * Core Tables:
+ * - claims: Extracted claims from agent responses
+ * - evidence: Collected evidence to verify claims
+ * - verifications: Verification results (verified/contradicted)
+ * - trust_scores: Trust score history over time
+ *
+ * Archive Tables (for compaction):
+ * - claims_archive: Old claims moved during compaction
+ * - evidence_archive: Old evidence moved during compaction
+ * - daily_summaries: Aggregated daily statistics
+ * - compaction_history: Track compaction runs
+ *
+ * FTS Tables:
+ * - claims_fts: Full-text search index for claims
+ */
+
+/**
+ * Core schema for verification tables
+ *
+ * Creates the main tables with appropriate indexes for efficient queries.
+ * Uses VARCHAR for IDs (nanoid format) and JSON for flexible data storage.
+ */
 export const VERIDIC_SCHEMA = `
 -- Claims: Extracted claims from AI responses
 -- Similar to summaries in lossless-claw
@@ -72,6 +99,12 @@ CREATE INDEX IF NOT EXISTS idx_trust_scores_session ON trust_scores(session_id);
 CREATE INDEX IF NOT EXISTS idx_trust_scores_calculated ON trust_scores(calculated_at);
 `;
 
+/**
+ * Full-text search schema using SQLite FTS5
+ *
+ * Enables fast text search across claims using Porter stemming
+ * and Unicode tokenization. Automatically synced via triggers.
+ */
 export const FTS_SCHEMA = `
 -- FTS5 virtual table for full-text search on claims
 CREATE VIRTUAL TABLE IF NOT EXISTS claims_fts USING fts5(
@@ -104,6 +137,12 @@ CREATE TRIGGER IF NOT EXISTS claims_fts_delete AFTER DELETE ON claims BEGIN
 END;
 `;
 
+/**
+ * SQL to rebuild the FTS index from scratch
+ *
+ * Used when the FTS index becomes out of sync or corrupted.
+ * Clears all FTS data and repopulates from the claims table.
+ */
 export const FTS_REBUILD = `
 -- Clear existing FTS data
 DELETE FROM claims_fts;
@@ -113,6 +152,12 @@ INSERT INTO claims_fts(rowid, claim_id, original_text, claim_type)
 SELECT rowid, claim_id, original_text, claim_type FROM claims;
 `;
 
+/**
+ * Schema for database compaction and archival
+ *
+ * Creates archive tables for moving old data and tracking compaction runs.
+ * Old claims/evidence are moved to archive tables to reduce active table size.
+ */
 export const COMPACTION_SCHEMA = `
 -- Claims archive: Old claims moved here during compaction
 CREATE TABLE IF NOT EXISTS claims_archive (
@@ -177,6 +222,15 @@ CREATE INDEX IF NOT EXISTS idx_daily_summaries_session ON daily_summaries(sessio
 CREATE INDEX IF NOT EXISTS idx_compaction_history_started ON compaction_history(started_at);
 `;
 
+/**
+ * Initialize the Veridic database schema
+ *
+ * Creates all required tables and indexes. Safe to call multiple times
+ * (uses IF NOT EXISTS). FTS initialization may fail on some SQLite builds
+ * that don't support FTS5 - this is handled gracefully.
+ *
+ * @param db - Database instance to initialize
+ */
 export async function initVeridicSchema(
   db: import("./core/database.js").Database
 ): Promise<void> {
@@ -186,14 +240,24 @@ export async function initVeridicSchema(
   try {
     await db.execute(FTS_SCHEMA);
   } catch {
+    // FTS5 may not be available on all SQLite builds
   }
 }
 
+/**
+ * Rebuild the full-text search index
+ *
+ * Clears the FTS index and repopulates from the claims table.
+ * Use when the index becomes corrupted or out of sync.
+ *
+ * @param db - Database instance with claims data
+ */
 export async function rebuildFTSIndex(
   db: import("./core/database.js").Database
 ): Promise<void> {
   try {
     await db.execute(FTS_REBUILD);
   } catch {
+    // FTS5 may not be available
   }
 }
