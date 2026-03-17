@@ -339,6 +339,100 @@ Text:
 	return b.String()
 }
 
+// viewSearch renders the search view with input and results
+func (m Model) viewSearch() string {
+	var b strings.Builder
+
+	b.WriteString(titleStyle.Render("Search Claims"))
+	b.WriteString("\n\n")
+
+	// Search input
+	if m.searching {
+		b.WriteString("🔍 ")
+		b.WriteString(m.searchInput.View())
+		b.WriteString("\n")
+		b.WriteString(dimStyle.Render("   Press Enter to search, Esc to cancel"))
+		b.WriteString("\n\n")
+	} else if m.searchQuery != "" {
+		b.WriteString(dimStyle.Render(fmt.Sprintf("Results for: \"%s\"", m.searchQuery)))
+		b.WriteString("\n\n")
+	}
+
+	// Search results
+	if len(m.searchResults) == 0 && m.searchQuery != "" && !m.searching {
+		b.WriteString(dimStyle.Render("No results found."))
+		b.WriteString("\n")
+	} else if len(m.searchResults) > 0 {
+		b.WriteString(fmt.Sprintf("%s (%d results)\n\n",
+			headerStyle.Render("Results"),
+			len(m.searchResults),
+		))
+
+		for i, c := range m.searchResults {
+			// Get verification status indicator
+			statusIcon := getStatusIcon(c.ClaimType)
+			confidenceBadge := getConfidenceBadge(c.Confidence)
+
+			// Highlight matched text (simple approach)
+			text := highlightMatch(c.OriginalText, m.searchQuery, 50)
+
+			line := fmt.Sprintf("%s %s %s %s",
+				statusIcon,
+				lipgloss.NewStyle().Width(15).Render(c.ClaimType),
+				confidenceBadge,
+				text,
+			)
+
+			if i == m.selectedSearch {
+				b.WriteString(selectedStyle.Render("▶ " + line))
+			} else {
+				b.WriteString(normalStyle.Render("  " + line))
+			}
+			b.WriteString("\n")
+
+			// Show session info
+			sessionInfo := fmt.Sprintf("     Session: %s", truncate(c.SessionID, 20))
+			b.WriteString(dimStyle.Render(sessionInfo))
+			b.WriteString("\n")
+		}
+	}
+
+	b.WriteString(m.searchHelp())
+	return b.String()
+}
+
+// highlightMatch highlights the search query in text
+func highlightMatch(text, query string, maxLen int) string {
+	// Simple case-insensitive highlight
+	lowerText := strings.ToLower(text)
+	lowerQuery := strings.ToLower(query)
+
+	idx := strings.Index(lowerText, lowerQuery)
+	if idx == -1 {
+		return truncate(text, maxLen)
+	}
+
+	// Truncate around the match
+	start := idx - 10
+	if start < 0 {
+		start = 0
+	}
+	end := idx + len(query) + 30
+	if end > len(text) {
+		end = len(text)
+	}
+
+	result := text[start:end]
+	if start > 0 {
+		result = "..." + result
+	}
+	if end < len(text) {
+		result = result + "..."
+	}
+
+	return result
+}
+
 // Helper functions
 
 func getTrustColor(score float64) lipgloss.Color {
@@ -411,25 +505,97 @@ func truncate(s string, maxLen int) string {
 // Help text
 
 func (m Model) sessionHelp() string {
-	return helpStyle.Render("\n↑/↓: navigate • enter: view claims • t: trust scores • q: quit")
+	return helpStyle.Render("\n↑/↓: navigate • enter: view claims • t: trust scores • s: search • q: quit")
 }
 
 func (m Model) claimsHelp() string {
-	return helpStyle.Render("\n↑/↓: navigate • enter: detail • e: evidence • v: verifications • esc: back • q: quit")
+	return helpStyle.Render("\n↑/↓: navigate • enter: detail • e: evidence • v: verifications • s: search • esc: back • q: quit")
 }
 
 func (m Model) evidenceHelp() string {
-	return helpStyle.Render("\n↑/↓: navigate • esc: back • q: quit")
+	return helpStyle.Render("\n↑/↓: navigate • s: search • esc: back • q: quit")
 }
 
 func (m Model) verificationsHelp() string {
-	return helpStyle.Render("\nesc: back • q: quit")
+	return helpStyle.Render("\ns: search • esc: back • q: quit")
 }
 
 func (m Model) trustScoresHelp() string {
-	return helpStyle.Render("\nesc: back • q: quit")
+	return helpStyle.Render("\ns: search • esc: back • q: quit")
 }
 
 func (m Model) claimDetailHelp() string {
-	return helpStyle.Render("\ne: evidence • v: verifications • esc: back • q: quit")
+	return helpStyle.Render("\ne: evidence • v: verifications • s: search • esc: back • q: quit")
+}
+
+func (m Model) searchHelp() string {
+	if m.searching {
+		return helpStyle.Render("\nenter: search • esc: cancel")
+	}
+	return helpStyle.Render("\n↑/↓: navigate • enter: detail • e: evidence • v: verifications • s: new search • esc: back • q: quit")
+}
+
+func (m Model) exportHelp() string {
+	return helpStyle.Render("\n1: JSON • 2: Markdown • 3: CSV • esc: cancel • q: quit")
+}
+
+// viewExport renders the export view
+func (m Model) viewExport() string {
+	var b strings.Builder
+
+	b.WriteString(titleStyle.Render("Export"))
+	b.WriteString("\n\n")
+
+	// Show context
+	sessionID := "All sessions"
+	if len(m.sessions) > 0 && m.previousView == ViewClaims {
+		sessionID = m.sessions[m.selectedSession].SessionID
+	}
+	b.WriteString(dimStyle.Render(fmt.Sprintf("Session: %s", truncate(sessionID, 30))))
+	b.WriteString("\n\n")
+
+	// Export options
+	b.WriteString(headerStyle.Render("Choose format:"))
+	b.WriteString("\n\n")
+
+	formats := []struct {
+		key  string
+		name string
+		desc string
+	}{
+		{"1", "JSON", "Machine-readable format for automation"},
+		{"2", "Markdown", "Human-readable report for documentation"},
+		{"3", "CSV", "Spreadsheet format for data analysis"},
+	}
+
+	for _, f := range formats {
+		keyStyle := lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("205")).
+			Padding(0, 1)
+
+		b.WriteString(fmt.Sprintf("  %s %s\n",
+			keyStyle.Render(f.key),
+			normalStyle.Render(f.name),
+		))
+		b.WriteString(fmt.Sprintf("      %s\n\n",
+			dimStyle.Render(f.desc),
+		))
+	}
+
+	// Show export status
+	if m.exporting {
+		b.WriteString(infoStyle.Render("⏳ Exporting..."))
+		b.WriteString("\n")
+	} else if m.exportMessage != "" {
+		if strings.Contains(m.exportMessage, "failed") {
+			b.WriteString(errorStyle.Render(m.exportMessage))
+		} else {
+			b.WriteString(successStyle.Render("✓ " + m.exportMessage))
+		}
+		b.WriteString("\n")
+	}
+
+	b.WriteString(m.exportHelp())
+	return b.String()
 }

@@ -3,6 +3,12 @@
  * Following lossless-claw pattern for configuration
  */
 
+import {
+  type CompactionConfig,
+  DEFAULT_COMPACTION_CONFIG,
+} from "./compactor/types.js";
+export type { CompactionConfig } from "./compactor/types.js";
+
 /**
  * Configuration for veridic-claw
  */
@@ -48,6 +54,9 @@ export interface VeridicConfig {
     task_completed: number;
     unknown: number;
   };
+
+  /** Compaction configuration */
+  compaction: CompactionConfig;
 }
 
 /**
@@ -78,6 +87,7 @@ export const DEFAULT_CONFIG: VeridicConfig = {
     task_completed: 1.0,
     unknown: 0.3,
   },
+  compaction: DEFAULT_COMPACTION_CONFIG,
 };
 
 /**
@@ -94,6 +104,10 @@ export function resolveConfig(config?: Partial<VeridicConfig>): VeridicConfig {
     severityWeights: {
       ...DEFAULT_CONFIG.severityWeights,
       ...config.severityWeights,
+    },
+    compaction: {
+      ...DEFAULT_CONFIG.compaction,
+      ...config.compaction,
     },
   };
 }
@@ -130,6 +144,25 @@ export function getConfigFromEnv(): Partial<VeridicConfig> {
 
   if (process.env.VERIDIC_AUTO_VERIFY !== undefined) {
     config.autoVerify = process.env.VERIDIC_AUTO_VERIFY === "true";
+  }
+
+  // Compaction config from environment
+  const compaction: Partial<CompactionConfig> = {};
+
+  if (process.env.VERIDIC_RETENTION_DAYS) {
+    compaction.retentionDays = parseInt(process.env.VERIDIC_RETENTION_DAYS, 10);
+  }
+
+  if (process.env.VERIDIC_AUTO_COMPACT !== undefined) {
+    compaction.autoCompact = process.env.VERIDIC_AUTO_COMPACT === "true";
+  }
+
+  if (process.env.VERIDIC_COMPACT_INTERVAL) {
+    compaction.compactInterval = process.env.VERIDIC_COMPACT_INTERVAL;
+  }
+
+  if (Object.keys(compaction).length > 0) {
+    config.compaction = { ...DEFAULT_COMPACTION_CONFIG, ...compaction };
   }
 
   return config;

@@ -255,7 +255,7 @@ func (d *Database) GetTrustScores(sessionID string) ([]TrustScore, error) {
 	return scores, nil
 }
 
-// SearchClaims performs full-text search on claims
+// SearchClaims performs basic LIKE search on claims
 func (d *Database) SearchClaims(query string) ([]Claim, error) {
 	sqlQuery := `
 		SELECT claim_id, session_id, task_id, response_id, claim_type,
@@ -285,6 +285,57 @@ func (d *Database) SearchClaims(query string) ([]Claim, error) {
 		json.Unmarshal([]byte(entitiesJSON), &c.Entities)
 		claims = append(claims, c)
 	}
+	return claims, nil
+}
+
+// SearchClaimsFTS performs full-text search using FTS5
+// Supports advanced query syntax:
+// - "exact phrase" for phrase matching
+// - word1 word2 for AND matching
+// - word1 OR word2 for OR matching
+// - word* for prefix matching
+func (d *Database) SearchClaimsFTS(query string, limit int) ([]Claim, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+
+	// Try FTS5 first, fallback to LIKE if FTS table doesn't exist
+	sqlQuery := `
+		SELECT c.claim_id, c.session_id, c.task_id, c.response_id, c.claim_type,
+		       c.original_text, c.entities, c.confidence, c.created_at
+		FROM claims c
+		JOIN claims_fts fts ON c.claim_id = fts.claim_id
+		WHERE claims_fts MATCH ?
+		ORDER BY bm25(claims_fts)
+		LIMIT ?
+	`
+	rows, err := d.db.Query(sqlQuery, query, limit)
+	if err != nil {
+		// Fallback to basic LIKE search if FTS not available
+		return d.SearchClaims(query)
+	}
+	defer rows.Close()
+
+	var claims []Claim
+	for rows.Next() {
+		var c Claim
+		var entitiesJSON string
+		var createdAt string
+		err := rows.Scan(&c.ClaimID, &c.SessionID, &c.TaskID, &c.ResponseID,
+			&c.ClaimType, &c.OriginalText, &entitiesJSON, &c.Confidence, &createdAt)
+		if err != nil {
+			return nil, err
+		}
+		c.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
+		json.Unmarshal([]byte(entitiesJSON), &c.Entities)
+		claims = append(claims, c)
+	}
+
+	// If no results from FTS, try basic search
+	if len(claims) == 0 {
+		return d.SearchClaims(query)
+	}
+
 	return claims, nil
 }
 
@@ -346,6 +397,12 @@ type trustScoresLoadedMsg struct {
 	err         error
 }
 
+type searchResultsMsg struct {
+	claims []Claim
+	query  string
+	err    error
+}
+
 type errMsg struct {
 	err error
 }
@@ -382,5 +439,12 @@ func (m Model) loadTrustScores(sessionID string) tea.Cmd {
 	return func() tea.Msg {
 		scores, err := m.db.GetTrustScores(sessionID)
 		return trustScoresLoadedMsg{trustScores: scores, err: err}
+	}
+}
+
+func (m Model) searchClaims(query string) tea.Cmd {
+	return func() tea.Msg {
+		claims, err := m.db.SearchClaimsFTS(query, 50)
+		return searchResultsMsg{claims: claims, query: query, err: err}
 	}
 }

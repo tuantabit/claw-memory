@@ -8,11 +8,13 @@ import { createVerifyTool, type VerifyInput, type VerifyOutput } from "./veridic
 import { createAuditTool, type AuditInput, type AuditOutput } from "./veridic-audit.js";
 import { createExpandTool, type ExpandInput, type ExpandOutput } from "./veridic-expand.js";
 import { createScoreTool, type ScoreInput, type ScoreOutput } from "./veridic-score.js";
+import { createCompactTool, type CompactInput, type CompactOutput } from "./veridic-compact.js";
 
 export { createVerifyTool, type VerifyInput, type VerifyOutput } from "./veridic-verify.js";
 export { createAuditTool, type AuditInput, type AuditOutput } from "./veridic-audit.js";
 export { createExpandTool, type ExpandInput, type ExpandOutput } from "./veridic-expand.js";
 export { createScoreTool, type ScoreInput, type ScoreOutput } from "./veridic-score.js";
+export { createCompactTool, type CompactInput, type CompactOutput } from "./veridic-compact.js";
 
 /**
  * Tool definition for OpenClaw
@@ -33,6 +35,7 @@ export function createVeridicTools(engine: VeridicEngine): ToolDefinition[] {
     createAuditTool(engine) as ToolDefinition,
     createExpandTool(engine) as ToolDefinition,
     createScoreTool(engine) as ToolDefinition,
+    createCompactTool(engine) as ToolDefinition,
   ];
 }
 

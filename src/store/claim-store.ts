@@ -257,7 +257,7 @@ export class ClaimStore {
   }
 
   /**
-   * Search claims by text
+   * Search claims by text (ILIKE - basic search)
    */
   async search(sessionId: string, query: string, limit = 20): Promise<Claim[]> {
     const rows = await this.db.query<Claim>(
@@ -269,6 +269,80 @@ export class ClaimStore {
     );
 
     return rows.map((r) => this.hydrate(r));
+  }
+
+  /**
+   * Full-text search using FTS5
+   * Supports advanced query syntax:
+   * - "exact phrase" for phrase matching
+   * - word1 word2 for AND matching
+   * - word1 OR word2 for OR matching
+   * - word* for prefix matching
+   */
+  async searchFTS(
+    query: string,
+    options?: {
+      sessionId?: string;
+      claimType?: ClaimType;
+      limit?: number;
+      offset?: number;
+    }
+  ): Promise<Claim[]> {
+    const limit = options?.limit ?? 50;
+    const offset = options?.offset ?? 0;
+
+    // Build WHERE clause for additional filters
+    const conditions: string[] = [];
+    const params: unknown[] = [query];
+
+    if (options?.sessionId) {
+      conditions.push("c.session_id = ?");
+      params.push(options.sessionId);
+    }
+
+    if (options?.claimType) {
+      conditions.push("c.claim_type = ?");
+      params.push(options.claimType);
+    }
+
+    const additionalWhere =
+      conditions.length > 0 ? `AND ${conditions.join(" AND ")}` : "";
+
+    params.push(limit, offset);
+
+    const rows = await this.db.query<Claim>(
+      `SELECT c.*,
+              bm25(claims_fts) as rank
+       FROM claims c
+       JOIN claims_fts fts ON c.claim_id = fts.claim_id
+       WHERE claims_fts MATCH ?
+       ${additionalWhere}
+       ORDER BY rank
+       LIMIT ? OFFSET ?`,
+      params
+    );
+
+    return rows.map((r) => this.hydrate(r));
+  }
+
+  /**
+   * Get search suggestions based on partial query
+   */
+  async getSearchSuggestions(
+    prefix: string,
+    limit = 10
+  ): Promise<{ text: string; count: number }[]> {
+    const rows = await this.db.query<{ text: string; count: number }>(
+      `SELECT original_text as text, COUNT(*) as count
+       FROM claims
+       WHERE original_text LIKE ?
+       GROUP BY original_text
+       ORDER BY count DESC
+       LIMIT ?`,
+      [`${prefix}%`, limit]
+    );
+
+    return rows;
   }
 
   /**
