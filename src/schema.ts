@@ -181,12 +181,21 @@ export async function initVeridicSchema(
   db: import("./core/database.js").Database
 ): Promise<void> {
   await db.execute(VERIDIC_SCHEMA);
-  await db.execute(FTS_SCHEMA);
   await db.execute(COMPACTION_SCHEMA);
+
+  try {
+    await db.execute(FTS_SCHEMA);
+  } catch {
+    // FTS5 not available in this SQLite build - search will use LIKE fallback
+  }
 }
 
 export async function rebuildFTSIndex(
   db: import("./core/database.js").Database
 ): Promise<void> {
-  await db.execute(FTS_REBUILD);
+  try {
+    await db.execute(FTS_REBUILD);
+  } catch {
+    // FTS5 not available - skip rebuild
+  }
 }

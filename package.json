@@ -19,11 +19,9 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "better-sqlite3": "^12.8.0",
     "nanoid": "^5.0.9"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.0.0",
     "typescript": "^5.7.0"
   },

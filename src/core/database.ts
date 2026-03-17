@@ -1,3 +1,9 @@
+import { DatabaseSync } from "node:sqlite";
+
+type SqlValue = string | number | bigint | Buffer | null;
+import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
+
 export interface Database {
   execute(sql: string, params?: unknown[]): Promise<void>;
   query<T>(sql: string, params?: unknown[]): Promise<T[]>;
@@ -9,34 +15,38 @@ export interface Database {
 }
 
 export class SQLiteDatabase implements Database {
-  private db: import("better-sqlite3").Database | null = null;
+  private db: DatabaseSync | null = null;
   private dbPath: string;
 
   constructor(dbPath: string) {
     this.dbPath = dbPath;
   }
 
-  private async getDb(): Promise<import("better-sqlite3").Database> {
+  private getDb(): DatabaseSync {
     if (!this.db) {
-      const BetterSqlite3 = (await import("better-sqlite3")).default;
-      this.db = new BetterSqlite3(this.dbPath);
+      if (this.dbPath !== ":memory:") {
+        mkdirSync(dirname(this.dbPath), { recursive: true });
+      }
+      this.db = new DatabaseSync(this.dbPath);
+      this.db.exec("PRAGMA journal_mode = WAL");
+      this.db.exec("PRAGMA foreign_keys = ON");
     }
     return this.db;
   }
 
   async execute(sql: string, params?: unknown[]): Promise<void> {
-    const db = await this.getDb();
+    const db = this.getDb();
     if (params && params.length > 0) {
-      db.prepare(sql).run(...params);
+      db.prepare(sql).run(...(params as SqlValue[]));
     } else {
       db.exec(sql);
     }
   }
 
   async query<T>(sql: string, params?: unknown[]): Promise<T[]> {
-    const db = await this.getDb();
+    const db = this.getDb();
     if (params && params.length > 0) {
-      return db.prepare(sql).all(...params) as T[];
+      return db.prepare(sql).all(...(params as SqlValue[])) as T[];
     }
     return db.prepare(sql).all() as T[];
   }
@@ -45,9 +55,9 @@ export class SQLiteDatabase implements Database {
     table: string,
     data: Partial<T>
   ): Promise<void> {
-    const db = await this.getDb();
+    const db = this.getDb();
     const keys = Object.keys(data);
-    const values = Object.values(data);
+    const values = Object.values(data) as SqlValue[];
     const placeholders = keys.map(() => "?").join(", ");
     const sql = `INSERT INTO ${table} (${keys.join(", ")}) VALUES (${placeholders})`;
     db.prepare(sql).run(...values);

@@ -42,33 +42,37 @@ export class CommandEvidenceSource {
   async collectForCommand(claim: Claim, command: string): Promise<Evidence[]> {
     const evidence: Evidence[] = [];
 
-    const receipts = await this.db.query<CommandReceipt>(
-      `SELECT * FROM command_receipts
-       WHERE command LIKE ?
-       ORDER BY created_at DESC
-       LIMIT 10`,
-      [`%${this.normalizeCommand(command)}%`]
-    );
+    try {
+      const receipts = await this.db.query<CommandReceipt>(
+        `SELECT * FROM command_receipts
+         WHERE command LIKE ?
+         ORDER BY created_at DESC
+         LIMIT 10`,
+        [`%${this.normalizeCommand(command)}%`]
+      );
 
-    for (const receipt of receipts) {
-      const supports = this.evaluateCommandSupport(claim, receipt);
+      for (const receipt of receipts) {
+        const supports = this.evaluateCommandSupport(claim, receipt);
 
-      evidence.push({
-        evidence_id: nanoid(),
-        claim_id: claim.claim_id,
-        source: "command_receipt" as EvidenceSource,
-        source_ref: receipt.receipt_id,
-        data: {
-          command: receipt.command,
-          exit_code: receipt.exit_code,
-          stdout_summary: receipt.stdout_summary,
-          duration_ms: receipt.duration_ms,
-          created_at: receipt.created_at,
-        },
-        supports_claim: supports,
-        confidence: this.calculateCommandConfidence(claim, receipt, command),
-        collected_at: new Date(),
-      });
+        evidence.push({
+          evidence_id: nanoid(),
+          claim_id: claim.claim_id,
+          source: "command_receipt" as EvidenceSource,
+          source_ref: receipt.receipt_id,
+          data: {
+            command: receipt.command,
+            exit_code: receipt.exit_code,
+            stdout_summary: receipt.stdout_summary,
+            duration_ms: receipt.duration_ms,
+            created_at: receipt.created_at,
+          },
+          supports_claim: supports,
+          confidence: this.calculateCommandConfidence(claim, receipt, command),
+          collected_at: new Date(),
+        });
+      }
+    } catch {
+      // ClawMemory tables not available - skip receipt-based evidence
     }
 
     return evidence;
@@ -78,36 +82,40 @@ export class CommandEvidenceSource {
   async collectTestEvidence(claim: Claim): Promise<Evidence[]> {
     const evidence: Evidence[] = [];
 
-    const testCommands = await this.db.query<CommandReceipt>(
-      `SELECT * FROM command_receipts
-       WHERE command LIKE '%test%'
-          OR command LIKE '%jest%'
-          OR command LIKE '%vitest%'
-          OR command LIKE '%mocha%'
-          OR command LIKE '%pytest%'
-       ORDER BY created_at DESC
-       LIMIT 5`
-    );
+    try {
+      const testCommands = await this.db.query<CommandReceipt>(
+        `SELECT * FROM command_receipts
+         WHERE command LIKE '%test%'
+            OR command LIKE '%jest%'
+            OR command LIKE '%vitest%'
+            OR command LIKE '%mocha%'
+            OR command LIKE '%pytest%'
+         ORDER BY created_at DESC
+         LIMIT 5`
+      );
 
-    for (const receipt of testCommands) {
-      const supports = this.evaluateTestSupport(claim, receipt);
+      for (const receipt of testCommands) {
+        const supports = this.evaluateTestSupport(claim, receipt);
 
-      evidence.push({
-        evidence_id: nanoid(),
-        claim_id: claim.claim_id,
-        source: "command_receipt" as EvidenceSource,
-        source_ref: receipt.receipt_id,
-        data: {
-          command: receipt.command,
-          exit_code: receipt.exit_code,
-          stdout_summary: receipt.stdout_summary,
-          duration_ms: receipt.duration_ms,
-          is_test_command: true,
-        },
-        supports_claim: supports,
-        confidence: this.calculateTestConfidence(claim, receipt),
-        collected_at: new Date(),
-      });
+        evidence.push({
+          evidence_id: nanoid(),
+          claim_id: claim.claim_id,
+          source: "command_receipt" as EvidenceSource,
+          source_ref: receipt.receipt_id,
+          data: {
+            command: receipt.command,
+            exit_code: receipt.exit_code,
+            stdout_summary: receipt.stdout_summary,
+            duration_ms: receipt.duration_ms,
+            is_test_command: true,
+          },
+          supports_claim: supports,
+          confidence: this.calculateTestConfidence(claim, receipt),
+          collected_at: new Date(),
+        });
+      }
+    } catch {
+      // ClawMemory tables not available - skip test evidence
     }
 
     return evidence;

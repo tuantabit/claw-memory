@@ -238,7 +238,7 @@ export class ClaimStore {
   async search(sessionId: string, query: string, limit = 20): Promise<Claim[]> {
     const rows = await this.db.query<Claim>(
       `SELECT * FROM claims
-       WHERE session_id = ? AND original_text ILIKE ?
+       WHERE session_id = ? AND original_text LIKE ?
        ORDER BY created_at DESC
        LIMIT ?`,
       [sessionId, `%${query}%`, limit]
@@ -247,7 +247,6 @@ export class ClaimStore {
     return rows.map((r) => this.hydrate(r));
   }
 
-  
   async searchFTS(
     query: string,
     options?: {
@@ -261,31 +260,28 @@ export class ClaimStore {
     const offset = options?.offset ?? 0;
 
     const conditions: string[] = [];
-    const params: unknown[] = [query];
+    const params: unknown[] = [];
 
     if (options?.sessionId) {
-      conditions.push("c.session_id = ?");
+      conditions.push("session_id = ?");
       params.push(options.sessionId);
     }
 
     if (options?.claimType) {
-      conditions.push("c.claim_type = ?");
+      conditions.push("claim_type = ?");
       params.push(options.claimType);
     }
 
-    const additionalWhere =
-      conditions.length > 0 ? `AND ${conditions.join(" AND ")}` : "";
+    conditions.push("original_text LIKE ?");
+    params.push(`%${query}%`);
 
+    const whereClause = conditions.join(" AND ");
     params.push(limit, offset);
 
     const rows = await this.db.query<Claim>(
-      `SELECT c.*,
-              bm25(claims_fts) as rank
-       FROM claims c
-       JOIN claims_fts fts ON c.claim_id = fts.claim_id
-       WHERE claims_fts MATCH ?
-       ${additionalWhere}
-       ORDER BY rank
+      `SELECT * FROM claims
+       WHERE ${whereClause}
+       ORDER BY created_at DESC
        LIMIT ? OFFSET ?`,
       params
     );

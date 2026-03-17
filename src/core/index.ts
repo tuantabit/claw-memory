@@ -1,5 +1,5 @@
+export type { Database } from "./database.js";
 export {
-  Database,
   SQLiteDatabase,
   createDatabase,
   getDefaultDbPath,

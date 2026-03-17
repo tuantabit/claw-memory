@@ -32,7 +32,7 @@ export class EvidenceStore {
       source: evidence.source,
       source_ref: evidence.source_ref,
       data: JSON.stringify(evidence.data),
-      supports_claim: evidence.supports_claim,
+      supports_claim: evidence.supports_claim ? 1 : 0,
       confidence: evidence.confidence,
     });
 
@@ -173,6 +173,7 @@ export class EvidenceStore {
     return {
       ...row,
       data: typeof row.data === "string" ? JSON.parse(row.data) : row.data ?? {},
+      supports_claim: Boolean(row.supports_claim),
       collected_at: new Date(row.collected_at),
     };
   }

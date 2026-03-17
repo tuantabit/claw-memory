@@ -49,36 +49,40 @@ export class ToolEvidenceSource {
   async collectForTool(claim: Claim, toolName: string): Promise<Evidence[]> {
     const evidence: Evidence[] = [];
 
-    const actions = await this.db.query<Action>(
-      `SELECT * FROM actions
-       WHERE session_id = ? AND tool_name = ?
-       ORDER BY created_at DESC
-       LIMIT 20`,
-      [claim.session_id, toolName]
-    );
+    try {
+      const actions = await this.db.query<Action>(
+        `SELECT * FROM actions
+         WHERE session_id = ? AND tool_name = ?
+         ORDER BY created_at DESC
+         LIMIT 20`,
+        [claim.session_id, toolName]
+      );
 
-    for (const action of actions) {
-      const relevance = this.calculateRelevance(claim, action);
-      if (relevance < 0.3) continue;
+      for (const action of actions) {
+        const relevance = this.calculateRelevance(claim, action);
+        if (relevance < 0.3) continue;
 
-      const supports = this.evaluateToolSupport(claim, action);
+        const supports = this.evaluateToolSupport(claim, action);
 
-      evidence.push({
-        evidence_id: nanoid(),
-        claim_id: claim.claim_id,
-        source: "tool_call" as EvidenceSource,
-        source_ref: action.action_id,
-        data: {
-          tool_name: action.tool_name,
-          tool_input: action.tool_input,
-          tool_result: this.summarizeResult(action.tool_result),
-          task_id: action.task_id,
-          created_at: action.created_at,
-        },
-        supports_claim: supports,
-        confidence: relevance,
-        collected_at: new Date(),
-      });
+        evidence.push({
+          evidence_id: nanoid(),
+          claim_id: claim.claim_id,
+          source: "tool_call" as EvidenceSource,
+          source_ref: action.action_id,
+          data: {
+            tool_name: action.tool_name,
+            tool_input: action.tool_input,
+            tool_result: this.summarizeResult(action.tool_result),
+            task_id: action.task_id,
+            created_at: action.created_at,
+          },
+          supports_claim: supports,
+          confidence: relevance,
+          collected_at: new Date(),
+        });
+      }
+    } catch {
+      // ClawMemory tables not available - skip tool-based evidence
     }
 
     return evidence;
@@ -88,37 +92,41 @@ export class ToolEvidenceSource {
   async collectForEntity(claim: Claim, entityValue: string): Promise<Evidence[]> {
     const evidence: Evidence[] = [];
 
-    const actions = await this.db.query<Action>(
-      `SELECT * FROM actions
-       WHERE session_id = ?
-         AND (
-           CAST(tool_input AS VARCHAR) LIKE ?
-           OR CAST(tool_result AS VARCHAR) LIKE ?
-         )
-       ORDER BY created_at DESC
-       LIMIT 10`,
-      [claim.session_id, `%${entityValue}%`, `%${entityValue}%`]
-    );
+    try {
+      const actions = await this.db.query<Action>(
+        `SELECT * FROM actions
+         WHERE session_id = ?
+           AND (
+             CAST(tool_input AS VARCHAR) LIKE ?
+             OR CAST(tool_result AS VARCHAR) LIKE ?
+           )
+         ORDER BY created_at DESC
+         LIMIT 10`,
+        [claim.session_id, `%${entityValue}%`, `%${entityValue}%`]
+      );
 
-    for (const action of actions) {
-      const supports = this.evaluateToolSupport(claim, action);
-      const relevance = this.calculateRelevance(claim, action);
+      for (const action of actions) {
+        const supports = this.evaluateToolSupport(claim, action);
+        const relevance = this.calculateRelevance(claim, action);
 
-      evidence.push({
-        evidence_id: nanoid(),
-        claim_id: claim.claim_id,
-        source: "tool_call" as EvidenceSource,
-        source_ref: action.action_id,
-        data: {
-          tool_name: action.tool_name,
-          tool_input: action.tool_input,
-          tool_result: this.summarizeResult(action.tool_result),
-          matched_entity: entityValue,
-        },
-        supports_claim: supports,
-        confidence: relevance,
-        collected_at: new Date(),
-      });
+        evidence.push({
+          evidence_id: nanoid(),
+          claim_id: claim.claim_id,
+          source: "tool_call" as EvidenceSource,
+          source_ref: action.action_id,
+          data: {
+            tool_name: action.tool_name,
+            tool_input: action.tool_input,
+            tool_result: this.summarizeResult(action.tool_result),
+            matched_entity: entityValue,
+          },
+          supports_claim: supports,
+          confidence: relevance,
+          collected_at: new Date(),
+        });
+      }
+    } catch {
+      // ClawMemory tables not available - skip entity-based evidence
     }
 
     return evidence;
@@ -126,13 +134,17 @@ export class ToolEvidenceSource {
 
   
   async getSessionTools(sessionId: string, limit = 50): Promise<Action[]> {
-    return this.db.query<Action>(
-      `SELECT * FROM actions
-       WHERE session_id = ?
-       ORDER BY created_at DESC
-       LIMIT ?`,
-      [sessionId, limit]
-    );
+    try {
+      return await this.db.query<Action>(
+        `SELECT * FROM actions
+         WHERE session_id = ?
+         ORDER BY created_at DESC
+         LIMIT ?`,
+        [sessionId, limit]
+      );
+    } catch {
+      return [];
+    }
   }
 
   

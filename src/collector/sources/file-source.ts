@@ -43,33 +43,37 @@ export class FileEvidenceSource {
   async collectFromReceipts(claim: Claim, filePath: string): Promise<Evidence[]> {
     const evidence: Evidence[] = [];
 
-    const receipts = await this.db.query<FileReceipt>(
-      `SELECT * FROM file_receipts
-       WHERE file_path LIKE ?
-       ORDER BY created_at DESC
-       LIMIT 10`,
-      [`%${filePath}%`]
-    );
+    try {
+      const receipts = await this.db.query<FileReceipt>(
+        `SELECT * FROM file_receipts
+         WHERE file_path LIKE ?
+         ORDER BY created_at DESC
+         LIMIT 10`,
+        [`%${filePath}%`]
+      );
 
-    for (const receipt of receipts) {
-      const supports = this.evaluateReceiptSupport(claim, receipt);
+      for (const receipt of receipts) {
+        const supports = this.evaluateReceiptSupport(claim, receipt);
 
-      evidence.push({
-        evidence_id: nanoid(),
-        claim_id: claim.claim_id,
-        source: "file_receipt" as EvidenceSource,
-        source_ref: receipt.receipt_id,
-        data: {
-          file_path: receipt.file_path,
-          before_hash: receipt.before_hash,
-          after_hash: receipt.after_hash,
-          action_id: receipt.action_id,
-          created_at: receipt.created_at,
-        },
-        supports_claim: supports,
-        confidence: this.calculateReceiptConfidence(claim, receipt),
-        collected_at: new Date(),
-      });
+        evidence.push({
+          evidence_id: nanoid(),
+          claim_id: claim.claim_id,
+          source: "file_receipt" as EvidenceSource,
+          source_ref: receipt.receipt_id,
+          data: {
+            file_path: receipt.file_path,
+            before_hash: receipt.before_hash,
+            after_hash: receipt.after_hash,
+            action_id: receipt.action_id,
+            created_at: receipt.created_at,
+          },
+          supports_claim: supports,
+          confidence: this.calculateReceiptConfidence(claim, receipt),
+          collected_at: new Date(),
+        });
+      }
+    } catch {
+      // ClawMemory tables not available - skip receipt-based evidence
     }
 
     return evidence;
