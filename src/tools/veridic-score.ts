@@ -1,7 +1,3 @@
-/**
- * veridic_score Tool
- * Get current trust score and trend
- */
 
 import type { VeridicEngine } from "../engine.js";
 
@@ -82,17 +78,13 @@ export function createScoreTool(engine: VeridicEngine) {
           };
         }
 
-        // Get current score
         const latestScore = await stores.trustScores.getLatest(sessionId);
         const currentScore = latestScore?.overall_score ?? 100;
 
-        // Get trend
         const trend = await stores.trustScores.getTrend(sessionId);
 
-        // Get category scores
         const categoryScores = latestScore?.category_scores ?? {};
 
-        // Get stats
         const claimStats = await stores.claims.getStats(sessionId);
         const verificationStats = await stores.verifications.getStats(sessionId);
 
@@ -110,7 +102,6 @@ export function createScoreTool(engine: VeridicEngine) {
             ),
         };
 
-        // Get history if requested
         let history: ScoreOutput["history"];
         if (input.include_history) {
           const historyLimit = input.history_limit ?? 10;
@@ -121,7 +112,6 @@ export function createScoreTool(engine: VeridicEngine) {
           }));
         }
 
-        // Generate warning if score is low
         let warning: string | null = null;
         const config = engine.getConfig();
         if (currentScore < config.trustBlockThreshold) {
@@ -130,7 +120,6 @@ export function createScoreTool(engine: VeridicEngine) {
           warning = `WARNING: Trust score below warning threshold (${config.trustWarningThreshold}). Verify agent actions.`;
         }
 
-        // Build summary
         let summary = `Trust Score: ${currentScore.toFixed(0)}/100 `;
 
         if (trend.direction === "improving") {

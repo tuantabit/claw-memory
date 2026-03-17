@@ -1,8 +1,3 @@
-/**
- * Evidence Collector
- * Orchestrates evidence collection from multiple sources
- * (like ContextAssembler in lossless-claw)
- */
 
 import type { Database } from "../core/database.js";
 import type { Evidence, Claim, ClaimType } from "../types.js";
@@ -11,9 +6,6 @@ import { CommandEvidenceSource } from "./sources/command-source.js";
 import { ToolEvidenceSource } from "./sources/tool-source.js";
 import { GitEvidenceSource } from "./sources/git-source.js";
 
-/**
- * Evidence collection result
- */
 export interface CollectionResult {
   claim_id: string;
   evidence: Evidence[];
@@ -43,10 +35,8 @@ export class EvidenceCollector {
     const evidence: Evidence[] = [];
     const sourcesChecked: string[] = [];
 
-    // Determine which sources to check based on claim type
     const sources = this.getSourcesForClaimType(claim.claim_type);
 
-    // Collect from each source in parallel
     const collectionPromises: Promise<Evidence[]>[] = [];
 
     if (sources.includes("file")) {
@@ -69,10 +59,8 @@ export class EvidenceCollector {
       collectionPromises.push(this.gitSource.collectForClaim(claim));
     }
 
-    // Wait for all collections
     const results = await Promise.all(collectionPromises);
 
-    // Flatten and deduplicate evidence
     for (const result of results) {
       evidence.push(...result);
     }
@@ -93,7 +81,6 @@ export class EvidenceCollector {
   async collectForClaims(claims: Claim[]): Promise<Map<string, CollectionResult>> {
     const results = new Map<string, CollectionResult>();
 
-    // Collect in parallel with concurrency limit
     const batchSize = 5;
     for (let i = 0; i < claims.length; i += batchSize) {
       const batch = claims.slice(i, i + batchSize);
@@ -145,7 +132,6 @@ export class EvidenceCollector {
       const key = `${e.source}:${e.source_ref}`;
       const existing = seen.get(key);
 
-      // Keep evidence with higher confidence
       if (!existing || e.confidence > existing.confidence) {
         seen.set(key, e);
       }
@@ -190,10 +176,8 @@ export class EvidenceCollector {
    * Check if there's sufficient evidence for a claim
    */
   hasSufficientEvidence(evidence: Evidence[]): boolean {
-    // Need at least one piece of evidence
     if (evidence.length === 0) return false;
 
-    // Need at least one high-confidence evidence
     return evidence.some((e) => e.confidence >= 0.7);
   }
 
@@ -222,9 +206,6 @@ export class EvidenceCollector {
   }
 }
 
-/**
- * Create evidence collector
- */
 export function createEvidenceCollector(
   db: Database,
   cwd?: string

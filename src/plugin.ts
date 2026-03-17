@@ -1,7 +1,3 @@
-/**
- * Veridic-Claw Plugin
- * OpenClaw plugin integration (like index.ts in lossless-claw)
- */
 
 import type { Database } from "./core/database.js";
 import type { VeridicConfig, LLMApi } from "./types.js";
@@ -9,9 +5,6 @@ import { VeridicEngine, createVeridicEngine } from "./engine.js";
 import { createVeridicTools } from "./tools/index.js";
 import { resolveConfig } from "./config.js";
 
-/**
- * Plugin state
- */
 interface PluginState {
   engine: VeridicEngine;
   initialized: boolean;
@@ -19,9 +12,6 @@ interface PluginState {
 
 let state: PluginState | null = null;
 
-/**
- * Initialize plugin
- */
 async function initializePlugin(
   db: Database,
   config?: Partial<VeridicConfig>
@@ -41,9 +31,6 @@ async function initializePlugin(
   return state;
 }
 
-/**
- * Extract AI response from context
- */
 function extractAIResponse(context: unknown): string | null {
   if (!context || typeof context !== "object") {
     return null;
@@ -58,9 +45,6 @@ function extractAIResponse(context: unknown): string | null {
   return ctx.response?.content ?? ctx.assistantMessage ?? ctx.output ?? null;
 }
 
-/**
- * Extract response ID from context
- */
 function extractResponseId(context: unknown): string | null {
   if (!context || typeof context !== "object") {
     return null;
@@ -70,9 +54,6 @@ function extractResponseId(context: unknown): string | null {
   return ctx.responseId ?? ctx.response_id ?? null;
 }
 
-/**
- * Extract session ID from context
- */
 function extractSessionId(context: unknown): string | null {
   if (!context || typeof context !== "object") {
     return null;
@@ -82,9 +63,6 @@ function extractSessionId(context: unknown): string | null {
   return ctx.sessionId ?? ctx.session_id ?? null;
 }
 
-/**
- * Extract task ID from context
- */
 function extractTaskId(context: unknown): string | null {
   if (!context || typeof context !== "object") {
     return null;
@@ -94,9 +72,6 @@ function extractTaskId(context: unknown): string | null {
   return ctx.taskId ?? ctx.task_id ?? null;
 }
 
-/**
- * Extract LLM API from context
- */
 function extractLLMApi(context: unknown): LLMApi | undefined {
   if (!context || typeof context !== "object") {
     return undefined;
@@ -106,9 +81,6 @@ function extractLLMApi(context: unknown): LLMApi | undefined {
   return ctx.llmApi;
 }
 
-/**
- * Veridic-Claw Plugin Export
- */
 export function createVeridicPlugin(db: Database, config?: Partial<VeridicConfig>) {
   const resolvedConfig = resolveConfig(config);
 
@@ -128,7 +100,6 @@ export function createVeridicPlugin(db: Database, config?: Partial<VeridicConfig
         const pluginState = await initializePlugin(db, resolvedConfig);
         const { engine } = pluginState;
 
-        // Set session context
         const sessionId = extractSessionId(context);
         const taskId = extractTaskId(context);
 
@@ -136,10 +107,8 @@ export function createVeridicPlugin(db: Database, config?: Partial<VeridicConfig
           engine.setSession(sessionId, taskId);
         }
 
-        // Get trust context
         const trustContext = await engine.getTrustContext();
 
-        // Check if should block
         if (await engine.shouldBlock()) {
           return {
             systemMessage: `[VERIDIC-CLAW] BLOCKED: Trust score (${trustContext.current_score.toFixed(0)}) is below threshold. Agent has made too many false claims.`,
@@ -147,7 +116,6 @@ export function createVeridicPlugin(db: Database, config?: Partial<VeridicConfig
           };
         }
 
-        // Inject warning if score is low
         if (trustContext.warning_message) {
           return {
             systemMessage: trustContext.warning_message,
@@ -167,13 +135,11 @@ export function createVeridicPlugin(db: Database, config?: Partial<VeridicConfig
 
         const { engine } = state;
 
-        // Get response
         const response = extractAIResponse(context);
         if (!response) {
           return;
         }
 
-        // Update session context
         const sessionId = extractSessionId(context);
         const taskId = extractTaskId(context);
 
@@ -181,14 +147,12 @@ export function createVeridicPlugin(db: Database, config?: Partial<VeridicConfig
           engine.setSession(sessionId, taskId);
         }
 
-        // Process response - extract and verify claims
         const responseId = extractResponseId(context);
         const llmApi = extractLLMApi(context);
 
         try {
           const result = await engine.processResponse(response, responseId, llmApi);
 
-          // Log results
           if (result.claims.length > 0) {
             console.log(
               `[veridic-claw] Processed ${result.claims.length} claims, ` +
@@ -197,7 +161,6 @@ export function createVeridicPlugin(db: Database, config?: Partial<VeridicConfig
             );
           }
 
-          // Check for critical issues
           const contradicted = result.verifications.filter(
             (v) => v.verification.status === "contradicted"
           );
@@ -226,7 +189,6 @@ export function createVeridicPlugin(db: Database, config?: Partial<VeridicConfig
 
       const tools = createVeridicTools(state.engine);
 
-      // Convert to OpenClaw tool format
       const toolMap: Record<string, unknown> = {};
       for (const tool of tools) {
         toolMap[tool.name] = {
@@ -255,7 +217,4 @@ export function createVeridicPlugin(db: Database, config?: Partial<VeridicConfig
   };
 }
 
-/**
- * Default export for direct use
- */
 export default createVeridicPlugin;

@@ -1,7 +1,3 @@
-/**
- * File Verification Strategy
- * Verify file-related claims
- */
 
 import type {
   Claim,
@@ -18,7 +14,6 @@ export class FileVerificationStrategy {
   verify(input: VerificationInput): VerificationOutput {
     const { claim, evidence } = input;
 
-    // Filter relevant evidence
     const fileEvidence = evidence.filter(
       (e) => e.source === "file_receipt" || e.source === "filesystem" || e.source === "git_diff"
     );
@@ -33,15 +28,12 @@ export class FileVerificationStrategy {
       };
     }
 
-    // Analyze evidence
     const supporting = fileEvidence.filter((e) => e.supports_claim);
     const contradicting = fileEvidence.filter((e) => !e.supports_claim);
 
-    // Calculate weighted confidence
     const supportingWeight = supporting.reduce((sum, e) => sum + e.confidence, 0);
     const contradictingWeight = contradicting.reduce((sum, e) => sum + e.confidence, 0);
 
-    // Determine status
     let status: VerificationStatus;
     let confidence: number;
     let details: string;

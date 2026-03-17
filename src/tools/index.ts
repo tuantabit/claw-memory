@@ -1,8 +1,3 @@
-/**
- * Veridic Tools Index
- * Export all agent tools (like tools/ in lossless-claw)
- */
-
 import type { VeridicEngine } from "../engine.js";
 import { createVerifyTool, type VerifyInput, type VerifyOutput } from "./veridic-verify.js";
 import { createAuditTool, type AuditInput, type AuditOutput } from "./veridic-audit.js";
@@ -16,9 +11,6 @@ export { createExpandTool, type ExpandInput, type ExpandOutput } from "./veridic
 export { createScoreTool, type ScoreInput, type ScoreOutput } from "./veridic-score.js";
 export { createCompactTool, type CompactInput, type CompactOutput } from "./veridic-compact.js";
 
-/**
- * Tool definition for OpenClaw
- */
 export interface ToolDefinition {
   name: string;
   description: string;
@@ -26,9 +18,6 @@ export interface ToolDefinition {
   execute: (input: unknown) => Promise<unknown>;
 }
 
-/**
- * Create all veridic tools
- */
 export function createVeridicTools(engine: VeridicEngine): ToolDefinition[] {
   return [
     createVerifyTool(engine) as ToolDefinition,
@@ -39,9 +28,6 @@ export function createVeridicTools(engine: VeridicEngine): ToolDefinition[] {
   ];
 }
 
-/**
- * Get tool by name
- */
 export function getTool(
   engine: VeridicEngine,
   name: string

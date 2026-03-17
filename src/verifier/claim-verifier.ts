@@ -1,7 +1,3 @@
-/**
- * Claim Verifier
- * Main verification engine (like RetrievalEngine in lossless-claw)
- */
 
 import type { Database } from "../core/database.js";
 import type {
@@ -20,17 +16,11 @@ import { CommandVerificationStrategy } from "./strategies/command-strategy.js";
 import { CodeVerificationStrategy } from "./strategies/code-strategy.js";
 import { CompletionVerificationStrategy } from "./strategies/completion-strategy.js";
 
-/**
- * Verification strategy interface
- */
 interface VerificationStrategy {
   verify(input: VerificationInput): VerificationOutput;
   handles(claimType: string): boolean;
 }
 
-/**
- * Full verification result
- */
 export interface FullVerificationResult {
   claim: Claim;
   verification: Verification;
@@ -49,7 +39,6 @@ export class ClaimVerifier {
     this.collector = createEvidenceCollector(db, cwd);
     this.config = config;
 
-    // Register strategies
     this.strategies = [
       new FileVerificationStrategy(),
       new CommandVerificationStrategy(),
@@ -63,11 +52,9 @@ export class ClaimVerifier {
    * Main entry point (like RetrievalEngine.expand())
    */
   async verify(claim: Claim): Promise<FullVerificationResult> {
-    // Step 1: Collect evidence
     const collectionResult = await this.collector.collectForClaim(claim);
     const evidence = collectionResult.evidence;
 
-    // Step 2: Store evidence
     for (const e of evidence) {
       await this.stores.evidence.create(
         e.claim_id,
@@ -79,11 +66,9 @@ export class ClaimVerifier {
       );
     }
 
-    // Step 3: Select and apply verification strategy
     const strategy = this.selectStrategy(claim.claim_type);
     const output = strategy.verify({ claim, evidence });
 
-    // Step 4: Create and store verification
     const verification = await this.stores.verifications.create(
       claim.claim_id,
       output.status,
@@ -197,10 +182,8 @@ export class ClaimVerifier {
     const claim = await this.stores.claims.getById(claimId);
     if (!claim) return null;
 
-    // Delete old evidence
     await this.stores.evidence.deleteByClaimId(claimId);
 
-    // Re-verify
     return this.verify(claim);
   }
 
@@ -249,7 +232,6 @@ export class ClaimVerifier {
       }
     }
 
-    // Default strategy
     return {
       verify: (input: VerificationInput): VerificationOutput => {
         const supporting = input.evidence.filter((e) => e.supports_claim);
@@ -290,9 +272,6 @@ export class ClaimVerifier {
   }
 }
 
-/**
- * Create claim verifier
- */
 export function createClaimVerifier(
   db: Database,
   config: VeridicConfig,

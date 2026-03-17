@@ -1,7 +1,3 @@
-/**
- * File Evidence Source
- * Collect evidence from file_receipts and filesystem
- */
 
 import { existsSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
@@ -28,17 +24,14 @@ export class FileEvidenceSource {
   async collectForClaim(claim: Claim): Promise<Evidence[]> {
     const evidence: Evidence[] = [];
 
-    // Get file paths from claim entities
     const filePaths = claim.entities
       .filter((e) => e.type === "file")
       .map((e) => e.normalized ?? e.value);
 
     for (const filePath of filePaths) {
-      // Evidence from file_receipts
       const receiptEvidence = await this.collectFromReceipts(claim, filePath);
       evidence.push(...receiptEvidence);
 
-      // Evidence from live filesystem
       const fsEvidence = await this.collectFromFilesystem(claim, filePath);
       if (fsEvidence) {
         evidence.push(fsEvidence);
@@ -54,7 +47,6 @@ export class FileEvidenceSource {
   async collectFromReceipts(claim: Claim, filePath: string): Promise<Evidence[]> {
     const evidence: Evidence[] = [];
 
-    // Find matching file receipts
     const receipts = await this.db.query<FileReceipt>(
       `SELECT * FROM file_receipts
        WHERE file_path LIKE ?
@@ -114,7 +106,6 @@ export class FileEvidenceSource {
    * Get file information
    */
   async getFileInfo(filePath: string): Promise<FileEvidence> {
-    // Try multiple path variations
     const pathsToTry = [
       filePath,
       `./${filePath}`,
@@ -170,14 +161,12 @@ export class FileEvidenceSource {
   private evaluateReceiptSupport(claim: Claim, receipt: FileReceipt): boolean {
     switch (claim.claim_type) {
       case "file_created":
-        // File was created if before_hash was NOT_EXIST or NEW_FILE
         return (
           receipt.before_hash === "NOT_EXIST" ||
           receipt.before_hash === "NEW_FILE"
         );
 
       case "file_modified":
-        // File was modified if hashes differ and file existed before
         return (
           receipt.before_hash !== receipt.after_hash &&
           receipt.before_hash !== "NOT_EXIST" &&
@@ -185,11 +174,9 @@ export class FileEvidenceSource {
         );
 
       case "file_deleted":
-        // File was deleted if after_hash is NOT_EXIST
         return receipt.after_hash === "NOT_EXIST";
 
       default:
-        // For other claims, check if file was touched
         return receipt.before_hash !== receipt.after_hash;
     }
   }
@@ -220,13 +207,11 @@ export class FileEvidenceSource {
   private calculateReceiptConfidence(claim: Claim, receipt: FileReceipt): number {
     let confidence = 0.7;
 
-    // Higher confidence if file path matches exactly
     const claimPath = claim.entities.find((e) => e.type === "file")?.value;
     if (claimPath && receipt.file_path.endsWith(claimPath)) {
       confidence += 0.2;
     }
 
-    // Higher confidence for recent receipts
     const receiptAge = Date.now() - new Date(receipt.created_at).getTime();
     if (receiptAge < 60000) { // Within 1 minute
       confidence += 0.1;
@@ -247,7 +232,6 @@ export class FileEvidenceSource {
     if (fileInfo.exists) {
       confidence += 0.2;
 
-      // Higher confidence if file was recently modified
       if (fileInfo.modified_at) {
         const age = Date.now() - fileInfo.modified_at.getTime();
         if (age < 300000) { // Within 5 minutes

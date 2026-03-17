@@ -1,7 +1,3 @@
-/**
- * Command Verification Strategy
- * Verify command execution claims
- */
 
 import type {
   Claim,
@@ -18,7 +14,6 @@ export class CommandVerificationStrategy {
   verify(input: VerificationInput): VerificationOutput {
     const { claim, evidence } = input;
 
-    // Filter relevant evidence
     const cmdEvidence = evidence.filter(
       (e) => e.source === "command_receipt" || e.source === "tool_call"
     );
@@ -33,12 +28,10 @@ export class CommandVerificationStrategy {
       };
     }
 
-    // For test claims, check exit codes
     if (claim.claim_type === "test_passed" || claim.claim_type === "test_failed") {
       return this.verifyTestClaim(claim, cmdEvidence);
     }
 
-    // For general command claims
     return this.verifyCommandClaim(claim, cmdEvidence);
   }
 
@@ -68,7 +61,6 @@ export class CommandVerificationStrategy {
       }
     }
 
-    // Determine result
     let status: VerificationStatus;
     let confidence: number;
     let details: string;
@@ -121,7 +113,6 @@ export class CommandVerificationStrategy {
     for (const e of evidence) {
       const data = e.data as { command?: string; exit_code?: number };
 
-      // Check if command matches
       const commandMatches = expectedCommands.some(
         (cmd) => data.command?.includes(cmd) ?? false
       );
@@ -135,7 +126,6 @@ export class CommandVerificationStrategy {
       }
     }
 
-    // Determine result
     let status: VerificationStatus;
     let confidence: number;
     let details: string;

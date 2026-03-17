@@ -1,8 +1,3 @@
-/**
- * Veridic-Claw Database Schema
- * Extension to ClawMemory schema for trust verification
- */
-
 export const VERIDIC_SCHEMA = `
 -- Claims: Extracted claims from AI responses
 -- Similar to summaries in lossless-claw
@@ -77,10 +72,6 @@ CREATE INDEX IF NOT EXISTS idx_trust_scores_session ON trust_scores(session_id);
 CREATE INDEX IF NOT EXISTS idx_trust_scores_calculated ON trust_scores(calculated_at);
 `;
 
-/**
- * FTS5 Full-Text Search Schema
- * Virtual table for fast text search across claims
- */
 export const FTS_SCHEMA = `
 -- FTS5 virtual table for full-text search on claims
 CREATE VIRTUAL TABLE IF NOT EXISTS claims_fts USING fts5(
@@ -113,9 +104,6 @@ CREATE TRIGGER IF NOT EXISTS claims_fts_delete AFTER DELETE ON claims BEGIN
 END;
 `;
 
-/**
- * Rebuild FTS index from existing claims data
- */
 export const FTS_REBUILD = `
 -- Clear existing FTS data
 DELETE FROM claims_fts;
@@ -125,10 +113,6 @@ INSERT INTO claims_fts(rowid, claim_id, original_text, claim_type)
 SELECT rowid, claim_id, original_text, claim_type FROM claims;
 `;
 
-/**
- * Compaction Schema
- * Archive tables and aggregation for database maintenance
- */
 export const COMPACTION_SCHEMA = `
 -- Claims archive: Old claims moved here during compaction
 CREATE TABLE IF NOT EXISTS claims_archive (
@@ -193,9 +177,6 @@ CREATE INDEX IF NOT EXISTS idx_daily_summaries_session ON daily_summaries(sessio
 CREATE INDEX IF NOT EXISTS idx_compaction_history_started ON compaction_history(started_at);
 `;
 
-/**
- * Initialize veridic schema
- */
 export async function initVeridicSchema(
   db: import("./core/database.js").Database
 ): Promise<void> {
@@ -204,9 +185,6 @@ export async function initVeridicSchema(
   await db.execute(COMPACTION_SCHEMA);
 }
 
-/**
- * Rebuild FTS index (for migration or repair)
- */
 export async function rebuildFTSIndex(
   db: import("./core/database.js").Database
 ): Promise<void> {

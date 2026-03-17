@@ -1,6 +1,3 @@
-/**
- * Compactor Module Exports
- */
 
 export { VeridicCompactor } from "./compactor.js";
 export {

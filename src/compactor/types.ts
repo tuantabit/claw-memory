@@ -1,6 +1,3 @@
-/**
- * Compaction Types
- */
 
 export interface CompactionConfig {
   /** Number of days to retain before archiving (default: 30) */
@@ -44,20 +41,16 @@ export interface CompactionReport {
   startedAt: Date;
   completedAt: Date | null;
 
-  // Configuration
   retentionDays: number;
 
-  // Metrics
   claimsArchived: number;
   evidenceArchived: number;
   orphansCleaned: number;
 
-  // Size changes
   sizeBefore: number;
   sizeAfter: number;
   spaceSaved: number;
 
-  // Status
   status: "running" | "success" | "partial" | "failed";
   errors: string[];
 }

@@ -1,7 +1,3 @@
-/**
- * Evidence Store
- * CRUD operations for evidence
- */
 
 import { nanoid } from "nanoid";
 import type { Database } from "../core/database.js";

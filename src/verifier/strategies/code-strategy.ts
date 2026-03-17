@@ -1,7 +1,3 @@
-/**
- * Code Verification Strategy
- * Verify code-related claims (added, removed, fixed)
- */
 
 import type {
   Claim,
@@ -18,7 +14,6 @@ export class CodeVerificationStrategy {
   verify(input: VerificationInput): VerificationOutput {
     const { claim, evidence } = input;
 
-    // Filter relevant evidence
     const codeEvidence = evidence.filter(
       (e) =>
         e.source === "file_receipt" ||
@@ -38,7 +33,6 @@ export class CodeVerificationStrategy {
       };
     }
 
-    // Analyze based on claim type
     switch (claim.claim_type) {
       case "code_added":
         return this.verifyCodeAdded(claim, codeEvidence);
@@ -69,21 +63,17 @@ export class CodeVerificationStrategy {
         after_hash?: string;
       };
 
-      // Check for additions in diff
       if (data.diff_summary?.additions && data.diff_summary.additions > 0) {
         supporting.push(e);
       }
-      // Check for hash changes (file was modified)
       else if (data.before_hash && data.after_hash && data.before_hash !== data.after_hash) {
         supporting.push(e);
       }
-      // Tool call evidence
       else if (e.source === "tool_call" && e.supports_claim) {
         supporting.push(e);
       }
     }
 
-    // Get entities for details
     const codeEntities = claim.entities.filter(
       (e) => e.type === "function" || e.type === "class" || e.type === "component"
     );
@@ -128,15 +118,12 @@ export class CodeVerificationStrategy {
         after_hash?: string;
       };
 
-      // Check for deletions in diff
       if (data.diff_summary?.deletions && data.diff_summary.deletions > 0) {
         supporting.push(e);
       }
-      // Check for hash changes
       else if (data.before_hash && data.after_hash && data.before_hash !== data.after_hash) {
         supporting.push(e);
       }
-      // Tool call evidence
       else if (e.source === "tool_call" && e.supports_claim) {
         supporting.push(e);
       }
@@ -172,7 +159,6 @@ export class CodeVerificationStrategy {
     const supporting: Evidence[] = [];
     const contradicting: Evidence[] = [];
 
-    // Look for file changes as evidence of fix
     for (const e of evidence) {
       const data = e.data as {
         before_hash?: string;
@@ -181,11 +167,9 @@ export class CodeVerificationStrategy {
         exit_code?: number;
       };
 
-      // File was changed (potential fix)
       if (data.before_hash && data.after_hash && data.before_hash !== data.after_hash) {
         supporting.push(e);
       }
-      // Has additions and deletions (refactoring/fix pattern)
       else if (
         data.diff_summary?.additions &&
         data.diff_summary?.deletions &&
@@ -194,11 +178,9 @@ export class CodeVerificationStrategy {
       ) {
         supporting.push(e);
       }
-      // Successful test after fix
       else if (data.exit_code === 0 && e.source === "command_receipt") {
         supporting.push(e);
       }
-      // Tool call that modified something
       else if (e.source === "tool_call" && e.supports_claim) {
         supporting.push(e);
       }

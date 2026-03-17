@@ -1,7 +1,3 @@
-/**
- * Verification Store
- * CRUD operations for verification results
- */
 
 import { nanoid } from "nanoid";
 import type { Database } from "../core/database.js";

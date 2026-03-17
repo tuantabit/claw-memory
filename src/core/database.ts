@@ -1,39 +1,13 @@
-/**
- * Database Interface for Veridic-Claw
- * Abstracts database operations (compatible with ClawMemory's DuckDB)
- */
-
-/**
- * Generic database interface
- */
 export interface Database {
-  /**
-   * Execute a SQL statement
-   */
   execute(sql: string, params?: unknown[]): Promise<void>;
-
-  /**
-   * Query the database
-   */
   query<T>(sql: string, params?: unknown[]): Promise<T[]>;
-
-  /**
-   * Insert a record
-   */
   insert<T extends Record<string, unknown>>(
     table: string,
     data: Partial<T>
   ): Promise<void>;
-
-  /**
-   * Close the database
-   */
   close(): Promise<void>;
 }
 
-/**
- * SQLite adapter using better-sqlite3
- */
 export class SQLiteDatabase implements Database {
   private db: import("better-sqlite3").Database | null = null;
   private dbPath: string;
@@ -87,16 +61,10 @@ export class SQLiteDatabase implements Database {
   }
 }
 
-/**
- * Create a SQLite database instance
- */
 export function createDatabase(dbPath: string): Database {
   return new SQLiteDatabase(dbPath);
 }
 
-/**
- * Get default database path
- */
 export function getDefaultDbPath(): string {
   const homeDir = process.env.HOME ?? process.env.USERPROFILE ?? ".";
   return `${homeDir}/.openclaw/veridic-claw.db`;

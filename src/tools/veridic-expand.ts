@@ -1,7 +1,3 @@
-/**
- * veridic_expand Tool
- * Expand verification details (like lcm_expand in lossless-claw)
- */
 
 import type { VeridicEngine } from "../engine.js";
 
@@ -61,7 +57,6 @@ export function createExpandTool(engine: VeridicEngine) {
       try {
         const stores = engine.getStores();
 
-        // Get claim details
         const claim = await stores.claims.getById(input.claim_id);
         if (!claim) {
           return {
@@ -73,13 +68,10 @@ export function createExpandTool(engine: VeridicEngine) {
           };
         }
 
-        // Get verification
         const verification = await stores.verifications.getByClaimId(input.claim_id);
 
-        // Get evidence
         const evidence = await stores.evidence.getByClaimId(input.claim_id);
 
-        // Build summary
         let summary = `Claim: "${claim.original_text.slice(0, 80)}..."\n`;
         summary += `Type: ${claim.claim_type}\n`;
         summary += `Confidence: ${(claim.confidence * 100).toFixed(0)}%\n`;

@@ -1,6 +1,3 @@
-/**
- * Store Index - Export all stores
- */
 
 export { ClaimStore } from "./claim-store.js";
 export { EvidenceStore } from "./evidence-store.js";
@@ -13,9 +10,6 @@ import { EvidenceStore } from "./evidence-store.js";
 import { VerificationStore } from "./verification-store.js";
 import { TrustScoreStore } from "./trust-score-store.js";
 
-/**
- * All stores bundled together (like lossless-claw's store pattern)
- */
 export interface VeridicStores {
   claims: ClaimStore;
   evidence: EvidenceStore;
@@ -23,9 +17,6 @@ export interface VeridicStores {
   trustScores: TrustScoreStore;
 }
 
-/**
- * Create all stores
- */
 export function createStores(db: Database): VeridicStores {
   return {
     claims: new ClaimStore(db),

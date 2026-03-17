@@ -1,7 +1,3 @@
-/**
- * VeridicCompactor - Main compaction orchestrator
- * Archives old data, creates summaries, cleans orphans, optimizes database
- */
 
 import { nanoid } from "nanoid";
 import type { Database } from "../core/database.js";
@@ -44,35 +40,26 @@ export class VeridicCompactor {
     this.report = this.initReport();
 
     try {
-      // Record start in history
       await this.recordCompactionStart();
 
-      // Get initial size
       this.report.sizeBefore = await this.getDatabaseSize();
 
-      // Phase 1: Archive old claims
       await this.archiveOldClaims();
 
-      // Phase 2: Archive old evidence
       await this.archiveOldEvidence();
 
-      // Phase 3: Create daily summaries
       await this.createDailySummaries();
 
-      // Phase 4: Clean orphaned data
       await this.cleanOrphans();
 
-      // Phase 5: Optimize database
       await this.optimizeDatabase();
 
-      // Get final size
       this.report.sizeAfter = await this.getDatabaseSize();
       this.report.spaceSaved = this.report.sizeBefore - this.report.sizeAfter;
 
       this.report.status = this.report.errors.length > 0 ? "partial" : "success";
       this.report.completedAt = new Date();
 
-      // Record completion
       await this.recordCompactionComplete();
 
       return this.report;
@@ -94,25 +81,21 @@ export class VeridicCompactor {
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - this.config.retentionDays);
 
-    // Build WHERE clause based on config
     let whereClause = `created_at < ?`;
     const params: unknown[] = [cutoffDate.toISOString()];
 
     if (this.config.preserveContradicted) {
-      // Don't archive contradicted claims
       whereClause += ` AND claim_id NOT IN (
         SELECT claim_id FROM verifications WHERE status = 'contradicted'
       )`;
     }
 
     if (this.config.preserveLowTrust) {
-      // Don't archive claims from low trust sessions
       whereClause += ` AND session_id NOT IN (
         SELECT session_id FROM trust_scores WHERE overall_score < 50
       )`;
     }
 
-    // Get claims to archive
     const claims = await this.db.query<{
       claim_id: string;
       session_id: string;
@@ -126,17 +109,14 @@ export class VeridicCompactor {
       params
     );
 
-    // Archive each claim
     for (const claim of claims) {
       try {
-        // Get verification status
         const verifications = await this.db.query<{ status: string }>(
           `SELECT status FROM verifications WHERE claim_id = ? ORDER BY verified_at DESC LIMIT 1`,
           [claim.claim_id]
         );
         const status = verifications.length > 0 ? verifications[0].status : null;
 
-        // Insert into archive
         await this.db.insert("claims_archive", {
           claim_id: claim.claim_id,
           session_id: claim.session_id,
@@ -147,7 +127,6 @@ export class VeridicCompactor {
           original_created_at: claim.created_at,
         });
 
-        // Delete from main table
         await this.db.execute(`DELETE FROM claims WHERE claim_id = ?`, [
           claim.claim_id,
         ]);
@@ -165,7 +144,6 @@ export class VeridicCompactor {
    * Archive evidence for archived claims
    */
   private async archiveOldEvidence(): Promise<void> {
-    // Get evidence for archived claims
     const evidence = await this.db.query<{
       evidence_id: string;
       claim_id: string;
@@ -182,7 +160,6 @@ export class VeridicCompactor {
 
     for (const ev of evidence) {
       try {
-        // Insert into archive
         await this.db.insert("evidence_archive", {
           evidence_id: ev.evidence_id,
           claim_id: ev.claim_id,
@@ -192,7 +169,6 @@ export class VeridicCompactor {
           original_collected_at: ev.collected_at,
         });
 
-        // Delete from main table
         await this.db.execute(`DELETE FROM evidence WHERE evidence_id = ?`, [
           ev.evidence_id,
         ]);
@@ -210,7 +186,6 @@ export class VeridicCompactor {
    * Create daily summaries from archived data
    */
   private async createDailySummaries(): Promise<void> {
-    // Get dates that need summaries
     const dates = await this.db.query<{ summary_date: string }>(
       `SELECT DISTINCT DATE(original_created_at) as summary_date
        FROM claims_archive
@@ -221,7 +196,6 @@ export class VeridicCompactor {
 
     for (const { summary_date } of dates) {
       try {
-        // Get aggregated data for this date
         const stats = await this.db.query<{
           session_id: string;
           total: number;
@@ -244,7 +218,6 @@ export class VeridicCompactor {
         );
 
         for (const stat of stats) {
-          // Get claim type breakdown
           const types = await this.db.query<{
             claim_type: string;
             count: number;
@@ -261,7 +234,6 @@ export class VeridicCompactor {
             claimTypes[t.claim_type] = t.count;
           }
 
-          // Get average trust score
           const trustScores = await this.db.query<{ overall_score: number }>(
             `SELECT overall_score FROM trust_scores
              WHERE session_id = ? AND DATE(calculated_at) = ?
@@ -294,7 +266,6 @@ export class VeridicCompactor {
    * Clean orphaned data
    */
   private async cleanOrphans(): Promise<void> {
-    // Count orphaned evidence before delete
     const orphanedEvidenceCount = await this.db.query<{ count: number }>(
       `SELECT COUNT(*) as count FROM evidence WHERE claim_id NOT IN (
         SELECT claim_id FROM claims
@@ -302,7 +273,6 @@ export class VeridicCompactor {
       )`
     );
 
-    // Delete evidence without claims
     await this.db.execute(
       `DELETE FROM evidence WHERE claim_id NOT IN (
         SELECT claim_id FROM claims
@@ -311,7 +281,6 @@ export class VeridicCompactor {
     );
     this.report.orphansCleaned += orphanedEvidenceCount[0]?.count ?? 0;
 
-    // Count orphaned verifications before delete
     const orphanedVerificationsCount = await this.db.query<{ count: number }>(
       `SELECT COUNT(*) as count FROM verifications WHERE claim_id NOT IN (
         SELECT claim_id FROM claims
@@ -319,7 +288,6 @@ export class VeridicCompactor {
       )`
     );
 
-    // Delete verifications without claims
     await this.db.execute(
       `DELETE FROM verifications WHERE claim_id NOT IN (
         SELECT claim_id FROM claims
@@ -343,7 +311,6 @@ export class VeridicCompactor {
 
     if (this.config.reindex) {
       try {
-        // Reindex all tables
         const tables = ["claims", "evidence", "verifications", "trust_scores"];
         for (const table of tables) {
           await this.db.execute(`REINDEX ${table}`);
@@ -374,7 +341,6 @@ export class VeridicCompactor {
         return result[0].page_count * result[0].page_size;
       }
     } catch {
-      // Fallback: return 0 if we can't get size
     }
     return 0;
   }

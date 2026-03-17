@@ -1,7 +1,3 @@
-/**
- * veridic_compact Tool
- * Run database compaction to archive old data and optimize storage
- */
 
 import type { VeridicEngine } from "../engine.js";
 import { VeridicCompactor, type CompactionConfig } from "../compactor/index.js";
@@ -66,7 +62,6 @@ export function createCompactTool(engine: VeridicEngine) {
         const stores = engine.getStores();
         const db = stores.claims["db"]; // Access internal database
 
-        // Show history
         if (input.history) {
           const compactor = new VeridicCompactor(db);
           const historyItems = await compactor.getHistory(10);
@@ -84,7 +79,6 @@ export function createCompactTool(engine: VeridicEngine) {
           };
         }
 
-        // Dry run - just count what would be affected
         if (input.dry_run) {
           const config = engine.getConfig();
           const retentionDays = input.retention_days ?? config.compaction.retentionDays;
@@ -92,13 +86,11 @@ export function createCompactTool(engine: VeridicEngine) {
           const cutoffDate = new Date();
           cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
 
-          // Count claims that would be archived
           const claimCount = await db.query<{ count: number }>(
             `SELECT COUNT(*) as count FROM claims WHERE created_at < ?`,
             [cutoffDate.toISOString()]
           );
 
-          // Count evidence that would be archived
           const evidenceCount = await db.query<{ count: number }>(
             `SELECT COUNT(*) as count FROM evidence e
              JOIN claims c ON e.claim_id = c.claim_id
@@ -117,7 +109,6 @@ export function createCompactTool(engine: VeridicEngine) {
           };
         }
 
-        // Run actual compaction
         const config = engine.getConfig();
         const compactionConfig: Partial<CompactionConfig> = {
           ...config.compaction,

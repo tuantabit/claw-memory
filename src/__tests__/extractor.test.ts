@@ -1,6 +1,3 @@
-/**
- * Claim Extractor Tests
- */
 
 import { describe, it, expect } from "vitest";
 import { ClaimExtractor, ALL_PATTERNS } from "../extractor/index.js";

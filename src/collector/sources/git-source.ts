@@ -1,7 +1,3 @@
-/**
- * Git Evidence Source
- * Collect evidence from git operations
- */
 
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
@@ -37,12 +33,10 @@ export class GitEvidenceSource {
     const evidence: Evidence[] = [];
 
     try {
-      // Check if in git repo
       if (!(await this.isGitRepo())) {
         return evidence;
       }
 
-      // Get file paths from claim
       const filePaths = claim.entities
         .filter((e) => e.type === "file")
         .map((e) => e.normalized ?? e.value);
@@ -54,13 +48,11 @@ export class GitEvidenceSource {
         }
       }
 
-      // For code-related claims, check recent diffs
       if (this.isCodeClaim(claim.claim_type)) {
         const diffEvidence = await this.collectRecentDiffs(claim);
         evidence.push(...diffEvidence);
       }
     } catch (error) {
-      // Git operations may fail, that's ok
       console.debug("[veridic-claw] Git evidence collection failed:", error);
     }
 
@@ -72,7 +64,6 @@ export class GitEvidenceSource {
    */
   async collectForFile(claim: Claim, filePath: string): Promise<Evidence | null> {
     try {
-      // Get git status for file
       const status = await this.getFileStatus(filePath);
       const diff = await this.getFileDiff(filePath);
 
@@ -108,17 +99,14 @@ export class GitEvidenceSource {
     const evidence: Evidence[] = [];
 
     try {
-      // Get recent changes
       const { stdout } = await execAsync(
         "git diff --stat HEAD~1 2>/dev/null || git diff --stat",
         { cwd: this.cwd }
       );
 
-      // Parse changed files
       const changedFiles = this.parseGitDiffStat(stdout);
 
       for (const file of changedFiles) {
-        // Check if file is relevant to claim
         const isRelevant = claim.entities.some(
           (e) => file.includes(e.value) || e.value.includes(file)
         );
@@ -146,7 +134,6 @@ export class GitEvidenceSource {
         }
       }
     } catch {
-      // Git might not have commits yet
     }
 
     return evidence;
@@ -203,7 +190,6 @@ export class GitEvidenceSource {
 
       const [additions, deletions] = stdout.trim().split(/\s+/).map(Number);
 
-      // Get actual diff content
       const { stdout: diffContent } = await execAsync(
         `git diff "${filePath}" | head -50`,
         { cwd: this.cwd }
@@ -264,7 +250,6 @@ export class GitEvidenceSource {
     const lines = output.split("\n");
 
     for (const line of lines) {
-      // Match lines like: " file.ts | 10 ++++----"
       const match = line.match(/^\s*(.+?)\s+\|\s+\d+/);
       if (match) {
         files.push(match[1].trim());
@@ -328,17 +313,14 @@ export class GitEvidenceSource {
   ): number {
     let confidence = 0.6;
 
-    // Higher confidence if status matches claim
     if (this.evaluateGitSupport(claim, status, diff)) {
       confidence += 0.2;
     }
 
-    // Higher confidence if there are actual changes
     if (diff && diff.changes.length > 0) {
       confidence += 0.1;
     }
 
-    // Higher confidence for significant changes
     if (diff && (diff.additions + diff.deletions) > 5) {
       confidence += 0.1;
     }

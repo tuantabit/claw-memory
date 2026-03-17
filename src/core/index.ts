@@ -1,7 +1,3 @@
-/**
- * Core module exports
- */
-
 export {
   Database,
   SQLiteDatabase,

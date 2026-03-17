@@ -1,7 +1,3 @@
-/**
- * veridic_verify Tool
- * Verify a specific claim (like lcm_grep in lossless-claw)
- */
 
 import type { VeridicEngine } from "../engine.js";
 
@@ -54,7 +50,6 @@ export function createVerifyTool(engine: VeridicEngine) {
       const results: VerifyOutput["results"] = [];
 
       try {
-        // Verify specific claim
         if (input.claim_id) {
           const result = await engine.verifyClaim(input.claim_id);
           if (result) {
@@ -69,7 +64,6 @@ export function createVerifyTool(engine: VeridicEngine) {
           }
         }
 
-        // Search and verify
         if (input.query) {
           const searchResults = await engine.searchClaims(input.query);
           for (const { claim } of searchResults) {
@@ -87,7 +81,6 @@ export function createVerifyTool(engine: VeridicEngine) {
           }
         }
 
-        // Verify all unverified
         if (input.all) {
           const stores = engine.getStores();
           const context = await engine.getTrustContext();
@@ -108,7 +101,6 @@ export function createVerifyTool(engine: VeridicEngine) {
           }
         }
 
-        // Build summary
         const verified = results.filter((r) => r.status === "verified").length;
         const contradicted = results.filter((r) => r.status === "contradicted").length;
         const unverified = results.filter((r) => r.status === "unverified").length;

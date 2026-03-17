@@ -1,7 +1,3 @@
-/**
- * Trust Score Store
- * CRUD operations for trust scores
- */
 
 import { nanoid } from "nanoid";
 import type { Database } from "../core/database.js";

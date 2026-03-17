@@ -1,7 +1,3 @@
-/**
- * Collector Index
- */
-
 export {
   EvidenceCollector,
   createEvidenceCollector,
@@ -12,3 +8,4 @@ export { FileEvidenceSource, type FileEvidence } from "./sources/file-source.js"
 export { CommandEvidenceSource, type CommandEvidence } from "./sources/command-source.js";
 export { ToolEvidenceSource } from "./sources/tool-source.js";
 export { GitEvidenceSource, type GitDiff, type GitStatus } from "./sources/git-source.js";
+export { ReceiptSource, createReceiptSource, type ReceiptSourceConfig } from "./sources/receipt-source.js";

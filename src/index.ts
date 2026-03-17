@@ -1,12 +1,3 @@
-/**
- * Veridic-Claw
- * Verify agent claims - "Don't trust. Verify."
- *
- * A plugin for detecting when AI agents make false claims about their actions.
- * Extracts claims from responses, collects evidence, and verifies truthfulness.
- */
-
-// Core types
 export type {
   Claim,
   ClaimType,
@@ -31,10 +22,8 @@ export type {
   VerificationFilter,
 } from "./types.js";
 
-// Config
 export { resolveConfig, getConfigFromEnv, DEFAULT_CONFIG } from "./config.js";
 
-// Database (core)
 export {
   type Database,
   SQLiteDatabase,
@@ -42,13 +31,10 @@ export {
   getDefaultDbPath,
 } from "./core/index.js";
 
-// Schema
 export { VERIDIC_SCHEMA, initVeridicSchema } from "./schema.js";
 
-// Engine
 export { VeridicEngine, createVeridicEngine } from "./engine.js";
 
-// Stores
 export {
   ClaimStore,
   EvidenceStore,
@@ -58,7 +44,6 @@ export {
   type VeridicStores,
 } from "./store/index.js";
 
-// Extractor
 export {
   ClaimExtractor,
   createClaimExtractor,
@@ -70,7 +55,6 @@ export {
   TEST_PATTERNS,
 } from "./extractor/index.js";
 
-// Collector
 export {
   EvidenceCollector,
   createEvidenceCollector,
@@ -81,7 +65,6 @@ export {
   type CollectionResult,
 } from "./collector/index.js";
 
-// Verifier
 export {
   ClaimVerifier,
   createClaimVerifier,
@@ -92,7 +75,6 @@ export {
   type FullVerificationResult,
 } from "./verifier/index.js";
 
-// Tools
 export {
   createVeridicTools,
   createVerifyTool,
@@ -103,9 +85,45 @@ export {
   type ToolDefinition,
 } from "./tools/index.js";
 
-// Plugin
 export { createVeridicPlugin } from "./plugin.js";
 
-// Default export - plugin factory
+export {
+  LosslessBridge,
+  createLosslessBridge,
+  type Message,
+  type AssembledContext,
+  type LosslessBridgeConfig,
+  DEFAULT_LOSSLESS_BRIDGE_CONFIG,
+} from "./context/index.js";
+
+export {
+  SharedDatabaseAdapter,
+  createSharedDatabaseAdapter,
+  MemoryBridge,
+  createMemoryBridge,
+  UnifiedAssembler,
+  createUnifiedAssembler,
+  DecayLevel,
+  type ClawMemoryReceipts,
+  type MemoryEntry,
+  type MemorySearchOptions,
+  type MemoryBridgeConfig,
+  type MemoryProvider,
+  type UnifiedAssemblerConfig,
+  type UnifiedContext,
+} from "./shared/index.js";
+
+export {
+  ReceiptSource,
+  createReceiptSource,
+  type ReceiptSourceConfig,
+} from "./collector/sources/receipt-source.js";
+
+export {
+  ReceiptStrategy,
+  createReceiptStrategy,
+  type ReceiptStrategyConfig,
+} from "./verifier/strategies/receipt-strategy.js";
+
 import { createVeridicPlugin } from "./plugin.js";
 export default createVeridicPlugin;

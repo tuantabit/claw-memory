@@ -1,7 +1,3 @@
-/**
- * Claim Store
- * CRUD operations for claims (like ConversationStore in lossless-claw)
- */
 
 import { nanoid } from "nanoid";
 import type { Database } from "../core/database.js";
@@ -291,7 +287,6 @@ export class ClaimStore {
     const limit = options?.limit ?? 50;
     const offset = options?.offset ?? 0;
 
-    // Build WHERE clause for additional filters
     const conditions: string[] = [];
     const params: unknown[] = [query];
 

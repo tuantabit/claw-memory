@@ -1,7 +1,3 @@
-/**
- * Tool Evidence Source
- * Collect evidence from actions table (tool calls)
- */
 
 import type { Database } from "../../core/database.js";
 import type { Evidence, Claim, EvidenceSource, Action } from "../../types.js";
@@ -16,7 +12,6 @@ export class ToolEvidenceSource {
   async collectForClaim(claim: Claim): Promise<Evidence[]> {
     const evidence: Evidence[] = [];
 
-    // Map claim types to expected tools
     const toolsForClaim = this.getExpectedTools(claim.claim_type);
 
     for (const toolName of toolsForClaim) {
@@ -24,7 +19,6 @@ export class ToolEvidenceSource {
       evidence.push(...toolEvidence);
     }
 
-    // Also search by entities
     for (const entity of claim.entities) {
       const entityEvidence = await this.collectForEntity(claim, entity.value);
       evidence.push(...entityEvidence);
@@ -61,7 +55,6 @@ export class ToolEvidenceSource {
   async collectForTool(claim: Claim, toolName: string): Promise<Evidence[]> {
     const evidence: Evidence[] = [];
 
-    // Get recent tool calls
     const actions = await this.db.query<Action>(
       `SELECT * FROM actions
        WHERE session_id = ? AND tool_name = ?
@@ -71,7 +64,6 @@ export class ToolEvidenceSource {
     );
 
     for (const action of actions) {
-      // Check if action is relevant to claim
       const relevance = this.calculateRelevance(claim, action);
       if (relevance < 0.3) continue;
 
@@ -104,7 +96,6 @@ export class ToolEvidenceSource {
   async collectForEntity(claim: Claim, entityValue: string): Promise<Evidence[]> {
     const evidence: Evidence[] = [];
 
-    // Search for entity in tool inputs
     const actions = await this.db.query<Action>(
       `SELECT * FROM actions
        WHERE session_id = ?
@@ -164,15 +155,12 @@ export class ToolEvidenceSource {
     switch (claim.claim_type) {
       case "file_created":
       case "file_modified":
-        // Check if file path matches
         return this.entityMatchesInput(claim, input);
 
       case "command_executed":
-        // Check if command was in input
         return this.hasCommandInInput(claim, input);
 
       case "test_passed":
-        // Check exit code in result
         return result?.exit_code === 0 || result?.exitCode === 0;
 
       case "test_failed":
@@ -220,13 +208,11 @@ export class ToolEvidenceSource {
   private calculateRelevance(claim: Claim, action: Action): number {
     let relevance = 0.5;
 
-    // Check tool match
     const expectedTools = this.getExpectedTools(claim.claim_type);
     if (expectedTools.includes(action.tool_name)) {
       relevance += 0.2;
     }
 
-    // Check entity match
     if (action.tool_input) {
       const inputStr = JSON.stringify(action.tool_input);
       const matchedEntities = claim.entities.filter((e) =>
@@ -235,7 +221,6 @@ export class ToolEvidenceSource {
       relevance += 0.1 * Math.min(matchedEntities.length, 3);
     }
 
-    // Check recency
     const age = Date.now() - new Date(action.created_at).getTime();
     if (age < 60000) relevance += 0.1;
 
@@ -248,7 +233,6 @@ export class ToolEvidenceSource {
   private summarizeResult(result: Record<string, unknown> | null): Record<string, unknown> | null {
     if (!result) return null;
 
-    // Truncate large results
     const str = JSON.stringify(result);
     if (str.length > 1000) {
       return {

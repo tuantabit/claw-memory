@@ -1,7 +1,3 @@
-/**
- * Veridic-Claw Configuration
- * Following lossless-claw pattern for configuration
- */
 
 import {
   type CompactionConfig,
@@ -9,9 +5,6 @@ import {
 } from "./compactor/types.js";
 export type { CompactionConfig } from "./compactor/types.js";
 
-/**
- * Configuration for veridic-claw
- */
 export interface VeridicConfig {
   /** Enable LLM-based claim extraction when regex confidence is low */
   enableLLM: boolean;
@@ -59,9 +52,6 @@ export interface VeridicConfig {
   compaction: CompactionConfig;
 }
 
-/**
- * Default configuration
- */
 export const DEFAULT_CONFIG: VeridicConfig = {
   enableLLM: true,
   extractionThreshold: 0.6,
@@ -90,9 +80,6 @@ export const DEFAULT_CONFIG: VeridicConfig = {
   compaction: DEFAULT_COMPACTION_CONFIG,
 };
 
-/**
- * Resolve config with defaults
- */
 export function resolveConfig(config?: Partial<VeridicConfig>): VeridicConfig {
   if (!config) {
     return { ...DEFAULT_CONFIG };
@@ -112,9 +99,6 @@ export function resolveConfig(config?: Partial<VeridicConfig>): VeridicConfig {
   };
 }
 
-/**
- * Get config from environment variables
- */
 export function getConfigFromEnv(): Partial<VeridicConfig> {
   const config: Partial<VeridicConfig> = {};
 
@@ -146,7 +130,6 @@ export function getConfigFromEnv(): Partial<VeridicConfig> {
     config.autoVerify = process.env.VERIDIC_AUTO_VERIFY === "true";
   }
 
-  // Compaction config from environment
   const compaction: Partial<CompactionConfig> = {};
 
   if (process.env.VERIDIC_RETENTION_DAYS) {

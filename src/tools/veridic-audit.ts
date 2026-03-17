@@ -1,7 +1,3 @@
-/**
- * veridic_audit Tool
- * Audit session for false claims (like lcm_describe in lossless-claw)
- */
 
 import type { VeridicEngine } from "../engine.js";
 import type { TrustReport, TrustIssue } from "../types.js";
@@ -61,10 +57,8 @@ export function createAuditTool(engine: VeridicEngine) {
 
     async execute(input: AuditInput): Promise<AuditOutput> {
       try {
-        // Generate report
         const report = await engine.generateReport(input.session_id);
 
-        // Filter issues by severity
         let issues = report.issues;
         if (input.min_severity) {
           const severityOrder = ["low", "medium", "high", "critical"];
@@ -72,7 +66,6 @@ export function createAuditTool(engine: VeridicEngine) {
           issues = issues.filter((i) => severityOrder.indexOf(i.severity) >= minIndex);
         }
 
-        // Build summary
         let summary = `Trust Score: ${report.summary.overall_score.toFixed(0)}/100. `;
         summary += `Claims: ${report.summary.total_claims} total, `;
         summary += `${report.summary.verified} verified, `;

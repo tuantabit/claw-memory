@@ -1,16 +1,7 @@
-/**
- * Veridic-Claw Core Types
- * Following lossless-claw pattern: types.ts defines all interfaces
- */
 
-// Re-export VeridicConfig from config for convenience
 export type { VeridicConfig } from "./config.js";
 
-// ==================== Claim Types ====================
 
-/**
- * Types of claims an agent can make
- */
 export type ClaimType =
   | "file_created"
   | "file_modified"
@@ -27,18 +18,12 @@ export type ClaimType =
   | "task_completed"
   | "unknown";
 
-/**
- * Verification status
- */
 export type VerificationStatus =
   | "verified"
   | "unverified"
   | "contradicted"
   | "insufficient_evidence";
 
-/**
- * Evidence source types
- */
 export type EvidenceSource =
   | "file_receipt"
   | "command_receipt"
@@ -47,18 +32,12 @@ export type EvidenceSource =
   | "tool_call"
   | "code_content";
 
-/**
- * Entity extracted from claim
- */
 export interface ClaimEntity {
   type: "file" | "function" | "class" | "component" | "command" | "package" | "test" | "error";
   value: string;
   normalized?: string;
 }
 
-/**
- * A claim extracted from AI response
- */
 export interface Claim {
   claim_id: string;
   session_id: string;
@@ -71,9 +50,6 @@ export interface Claim {
   created_at: Date;
 }
 
-/**
- * Evidence supporting or contradicting a claim
- */
 export interface Evidence {
   evidence_id: string;
   claim_id: string;
@@ -85,9 +61,6 @@ export interface Evidence {
   collected_at: Date;
 }
 
-/**
- * Result of claim verification
- */
 export interface Verification {
   verification_id: string;
   claim_id: string;
@@ -98,9 +71,6 @@ export interface Verification {
   verified_at: Date;
 }
 
-/**
- * Trust score for a session
- */
 export interface TrustScore {
   score_id: string;
   session_id: string;
@@ -113,11 +83,7 @@ export interface TrustScore {
   calculated_at: Date;
 }
 
-// ==================== Engine Types ====================
 
-/**
- * Trust context injected into agent
- */
 export interface TrustContext {
   session_id: string;
   current_score: number;
@@ -125,9 +91,6 @@ export interface TrustContext {
   warning_message?: string;
 }
 
-/**
- * A trust issue detected
- */
 export interface TrustIssue {
   claim_id: string;
   claim_type: ClaimType;
@@ -137,9 +100,6 @@ export interface TrustIssue {
   details: string;
 }
 
-/**
- * Full trust report for a session
- */
 export interface TrustReport {
   session_id: string;
   generated_at: Date;
@@ -160,11 +120,7 @@ export interface TrustReport {
   recommendations: string[];
 }
 
-// ==================== Extraction Types ====================
 
-/**
- * Pattern for claim detection
- */
 export interface ClaimPattern {
   pattern: RegExp;
   type: ClaimType;
@@ -172,9 +128,6 @@ export interface ClaimPattern {
   entityGroups?: { index: number; type: ClaimEntity["type"] }[];
 }
 
-/**
- * Result of claim extraction
- */
 export interface ExtractionResult {
   claims: Claim[];
   text_length: number;
@@ -182,19 +135,12 @@ export interface ExtractionResult {
   method: "regex" | "llm" | "hybrid";
 }
 
-// ==================== Verification Strategy Types ====================
 
-/**
- * Input for verification strategy
- */
 export interface VerificationInput {
   claim: Claim;
   evidence: Evidence[];
 }
 
-/**
- * Output from verification strategy
- */
 export interface VerificationOutput {
   status: VerificationStatus;
   confidence: number;
@@ -203,11 +149,7 @@ export interface VerificationOutput {
   contradicting_evidence: string[];
 }
 
-// ==================== Dependencies (like LcmDependencies) ====================
 
-/**
- * LLM API interface (from OpenClaw context)
- */
 export interface LLMApi {
   complete: (params: {
     model?: string;
@@ -217,9 +159,6 @@ export interface LLMApi {
   }) => Promise<{ content: string }>;
 }
 
-/**
- * Dependencies injected from OpenClaw (like LcmDependencies)
- */
 export interface VeridicDependencies {
   /** LLM API for extraction/verification */
   llmApi?: LLMApi;
@@ -233,11 +172,7 @@ export interface VeridicDependencies {
   log: (level: "debug" | "info" | "warn" | "error", message: string, data?: unknown) => void;
 }
 
-// ==================== Store Types ====================
 
-/**
- * Query options for stores
- */
 export interface QueryOptions {
   limit?: number;
   offset?: number;
@@ -245,9 +180,6 @@ export interface QueryOptions {
   orderDir?: "asc" | "desc";
 }
 
-/**
- * Filter for claims
- */
 export interface ClaimFilter {
   session_id?: string;
   task_id?: string;
@@ -256,20 +188,13 @@ export interface ClaimFilter {
   min_confidence?: number;
 }
 
-/**
- * Filter for verifications
- */
 export interface VerificationFilter {
   claim_id?: string;
   status?: VerificationStatus;
   min_confidence?: number;
 }
 
-// ==================== Receipt Types (from ClawMemory) ====================
 
-/**
- * File receipt - tracks file changes
- */
 export interface FileReceipt {
   receipt_id: string;
   action_id: string;
@@ -279,9 +204,6 @@ export interface FileReceipt {
   created_at: Date;
 }
 
-/**
- * Command receipt - tracks command execution
- */
 export interface CommandReceipt {
   receipt_id: string;
   action_id: string;
@@ -292,9 +214,6 @@ export interface CommandReceipt {
   created_at: Date;
 }
 
-/**
- * Action - tracks tool calls
- */
 export interface Action {
   action_id: string;
   session_id: string;

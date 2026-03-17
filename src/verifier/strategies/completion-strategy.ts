@@ -1,7 +1,3 @@
-/**
- * Task Completion Verification Strategy
- * Verify task completion claims
- */
 
 import type {
   Claim,
@@ -18,8 +14,6 @@ export class CompletionVerificationStrategy {
   verify(input: VerificationInput): VerificationOutput {
     const { claim, evidence } = input;
 
-    // Completion claims require substantial evidence
-    // We need to see that actions were actually taken
 
     const toolEvidence = evidence.filter((e) => e.source === "tool_call");
     const fileEvidence = evidence.filter(
@@ -27,20 +21,16 @@ export class CompletionVerificationStrategy {
     );
     const commandEvidence = evidence.filter((e) => e.source === "command_receipt");
 
-    // Calculate activity score
     const activityScore = this.calculateActivityScore(
       toolEvidence,
       fileEvidence,
       commandEvidence
     );
 
-    // Check for recent activity
     const recentActivity = this.hasRecentActivity(evidence);
 
-    // Check for successful outcomes
     const successfulOutcomes = this.countSuccessfulOutcomes(evidence);
 
-    // Determine verification result
     let status: VerificationStatus;
     let confidence: number;
     let details: string;
@@ -82,12 +72,10 @@ export class CompletionVerificationStrategy {
   ): number {
     let score = 0;
 
-    // Weight different types of evidence
     score += Math.min(toolEvidence.length * 0.1, 0.4);
     score += Math.min(fileEvidence.length * 0.15, 0.3);
     score += Math.min(commandEvidence.length * 0.1, 0.3);
 
-    // Bonus for diversity of evidence
     const evidenceTypes = [
       toolEvidence.length > 0,
       fileEvidence.length > 0,
@@ -124,17 +112,14 @@ export class CompletionVerificationStrategy {
         before_hash?: string;
       };
 
-      // Successful command
       if (data.exit_code === 0) {
         count++;
       }
 
-      // File was actually changed
       if (data.before_hash && data.after_hash && data.before_hash !== data.after_hash) {
         count++;
       }
 
-      // General supporting evidence
       if (e.supports_claim && e.confidence >= 0.7) {
         count++;
       }
