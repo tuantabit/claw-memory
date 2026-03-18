@@ -8,3 +8,7 @@ dist/
 tui/veridic-tui
 tui/veridic-tui-*
 *.exe
+
+# Markdown files (except README)
+*.md
+!README.md
