@@ -175,7 +175,7 @@ export class LosslessBridge {
       metadata: {
         rawMessageCount: recentMessages.length,
         summarizedChunks: summaries.length,
-        verificationEvents: trustContext?.recent_issues.length ?? 0,
+        verificationEvents: trustContext?.recent_issues?.length ?? 0,
       },
     };
   }
@@ -346,7 +346,7 @@ Summary:`;
   }
 
   private formatVerificationContext(trustContext: TrustContext): string | undefined {
-    if (trustContext.recent_issues.length === 0) {
+    if (!trustContext.recent_issues || trustContext.recent_issues.length === 0) {
       return undefined;
     }
 

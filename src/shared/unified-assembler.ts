@@ -63,7 +63,7 @@ export class UnifiedAssembler {
       );
     }
 
-    const contradictions = trustContext?.recent_issues.filter(
+    const contradictions = trustContext?.recent_issues?.filter(
       issue => issue.status === "contradicted"
     );
 
@@ -103,7 +103,7 @@ export class UnifiedAssembler {
       contextSources: {
         lossless: losslessContext.summary !== undefined || losslessContext.metadata.rawMessageCount > 0,
         memory: !!memoryContext && memoryContext.length > 0,
-        verification: !!trustContext && trustContext.recent_issues.length > 0,
+        verification: !!trustContext && !!trustContext.recent_issues && trustContext.recent_issues.length > 0,
       },
     };
   }
