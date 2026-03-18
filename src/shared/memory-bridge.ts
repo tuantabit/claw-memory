@@ -1,4 +1,6 @@
 import type { Verification, Claim, TrustScore } from "../types.js";
+import type { Database } from "../core/database.js";
+import { MemoryStore } from "../store/memory-store.js";
 
 export enum DecayLevel {
   FULL = 0,
@@ -59,17 +61,52 @@ export interface MemoryProvider {
   touch(id: string): Promise<void>;
 }
 
+/**
+ * MemoryBridge - 3-layer memory system with persistent storage
+ *
+ * Manages agent memory with:
+ * - Short-term: Recent events (24h, 1000 entries)
+ * - Long-term: Important patterns (30d, 10000 entries)
+ * - Digest: Permanent compressed summaries
+ *
+ * Uses MemoryStore for persistence, falling back to in-memory
+ * when database is not provided.
+ */
 export class MemoryBridge {
   private config: MemoryBridgeConfig;
+  private db: Database | null = null;
+  private store: MemoryStore | null = null;
   private provider: MemoryProvider | null = null;
+
+  // Fallback in-memory store
   private localStore: Map<string, MemoryEntry[]> = new Map();
 
   constructor(config: Partial<MemoryBridgeConfig> = {}) {
     this.config = { ...DEFAULT_MEMORY_BRIDGE_CONFIG, ...config };
   }
 
+  /**
+   * Initialize with database for persistent storage
+   */
+  setDatabase(db: Database): void {
+    this.db = db;
+    this.store = new MemoryStore(db);
+    // Also set store as provider
+    this.provider = this.store;
+  }
+
+  /**
+   * Set a custom memory provider (overrides database store)
+   */
   setProvider(provider: MemoryProvider): void {
     this.provider = provider;
+  }
+
+  /**
+   * Get the underlying MemoryStore (if database is set)
+   */
+  getStore(): MemoryStore | null {
+    return this.store;
   }
 
   async storeVerification(
@@ -270,6 +307,28 @@ export class MemoryBridge {
   }
 }
 
+/**
+ * Create a MemoryBridge instance
+ *
+ * @param config - Optional configuration
+ * @returns MemoryBridge instance (call setDatabase() for persistence)
+ */
 export function createMemoryBridge(config?: Partial<MemoryBridgeConfig>): MemoryBridge {
   return new MemoryBridge(config);
+}
+
+/**
+ * Create a MemoryBridge with database for persistent storage
+ *
+ * @param db - Database instance
+ * @param config - Optional configuration
+ * @returns MemoryBridge instance with persistence enabled
+ */
+export function createPersistentMemoryBridge(
+  db: Database,
+  config?: Partial<MemoryBridgeConfig>
+): MemoryBridge {
+  const bridge = new MemoryBridge(config);
+  bridge.setDatabase(db);
+  return bridge;
 }

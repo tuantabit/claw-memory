@@ -8,6 +8,8 @@
  * 2. Extracts and verifies claims from agent responses
  * 3. Tracks trust scores and blocks untrusted agents
  * 4. Exposes verification tools for agent use
+ * 5. Captures receipts from tool calls for verification
+ * 6. Manages persistent memory across sessions
  *
  * @example
  * ```typescript
@@ -27,15 +29,21 @@ import type { VeridicConfig, LLMApi } from "./types.js";
 import { VeridicEngine, createVeridicEngine } from "./engine.js";
 import { createVeridicTools } from "./tools/index.js";
 import { resolveConfig } from "./config.js";
+import { ReceiptCollector, createReceiptCollector } from "./collector/receipt-collector.js";
+import { MemoryBridge, createPersistentMemoryBridge } from "./shared/memory-bridge.js";
+import { LosslessBridge, createPersistentLosslessBridge } from "./context/lossless-bridge.js";
 
 /**
  * Internal plugin state
  *
- * Maintains the engine instance and initialization status.
+ * Maintains all component instances and initialization status.
  * Singleton pattern ensures consistent state across hooks.
  */
 interface PluginState {
   engine: VeridicEngine;
+  receiptCollector: ReceiptCollector;
+  memoryBridge: MemoryBridge;
+  losslessBridge: LosslessBridge;
   initialized: boolean;
 }
 
@@ -45,12 +53,17 @@ let state: PluginState | null = null;
 /**
  * Initialize the plugin with database and config
  *
- * Creates the VeridicEngine if not already initialized.
+ * Creates all components if not already initialized:
+ * - VeridicEngine for claim extraction and verification
+ * - ReceiptCollector for capturing tool call evidence
+ * - MemoryBridge for persistent 3-layer memory
+ * - LosslessBridge for context management
+ *
  * Safe to call multiple times - returns existing state.
  *
  * @param db - Database for persistence
  * @param config - Optional configuration overrides
- * @returns Plugin state with initialized engine
+ * @returns Plugin state with all initialized components
  */
 async function initializePlugin(
   db: Database,
@@ -60,11 +73,33 @@ async function initializePlugin(
     return state;
   }
 
+  // Create verification engine
   const engine = createVeridicEngine(db, config);
   await engine.initialize();
 
+  // Create receipt collector for tool call evidence
+  const receiptCollector = createReceiptCollector(db);
+
+  // Create persistent memory bridge
+  const memoryBridge = createPersistentMemoryBridge(db, {
+    contradictionImportance: 0.95,
+    verifiedImportance: 0.4,
+    unverifiedImportance: 0.3,
+  });
+
+  // Create persistent context bridge
+  const losslessBridge = createPersistentLosslessBridge(db, {
+    maxTokens: 8000,
+    recentMessageCount: 10,
+    includeVerifications: true,
+    trustWarningThreshold: config?.trustWarningThreshold ?? 70,
+  });
+
   state = {
     engine,
+    receiptCollector,
+    memoryBridge,
+    losslessBridge,
     initialized: true,
   };
 
@@ -128,6 +163,44 @@ function extractLLMApi(context: unknown): LLMApi | undefined {
 
   const ctx = context as { llmApi?: LLMApi };
   return ctx.llmApi;
+}
+
+/**
+ * Extract tool call context from hook payload
+ *
+ * Handles different context formats from various frameworks.
+ * Returns a normalized object with session, task, tool, and input info.
+ */
+function extractToolContext(context: unknown): {
+  sessionId: string | null;
+  taskId: string | null;
+  toolName: string | null;
+  input: unknown;
+} {
+  if (!context || typeof context !== "object") {
+    return { sessionId: null, taskId: null, toolName: null, input: null };
+  }
+
+  const ctx = context as {
+    sessionId?: string;
+    session_id?: string;
+    taskId?: string;
+    task_id?: string;
+    toolName?: string;
+    tool_name?: string;
+    name?: string;
+    input?: unknown;
+    toolInput?: unknown;
+    tool_input?: unknown;
+    parameters?: unknown;
+  };
+
+  return {
+    sessionId: ctx.sessionId ?? ctx.session_id ?? null,
+    taskId: ctx.taskId ?? ctx.task_id ?? null,
+    toolName: ctx.toolName ?? ctx.tool_name ?? ctx.name ?? null,
+    input: ctx.input ?? ctx.toolInput ?? ctx.tool_input ?? ctx.parameters ?? null,
+  };
 }
 
 /**
@@ -259,6 +332,101 @@ export function createVeridicPlugin(db: Database, config?: Partial<VeridicConfig
           console.error("[veridic-claw] Error processing response:", error);
         }
       },
+
+      /**
+       * Called when a tool call starts
+       *
+       * Creates an action record to track the tool call.
+       * Returns actionId for use in subsequent hooks.
+       */
+      on_tool_call: async (context: unknown) => {
+        if (!state?.initialized) return {};
+
+        const ctx = extractToolContext(context);
+        if (!ctx.sessionId || !ctx.toolName) return {};
+
+        try {
+          const actionId = await state.receiptCollector.startAction(
+            ctx.sessionId,
+            ctx.toolName,
+            ctx.input,
+            ctx.taskId ?? undefined
+          );
+
+          return { actionId };
+        } catch (error) {
+          console.error("[veridic-claw] Error starting action:", error);
+          return {};
+        }
+      },
+
+      /**
+       * Called when a tool call completes
+       *
+       * Creates receipts based on tool type:
+       * - File operations → file_receipts
+       * - Command executions → command_receipts
+       */
+      on_tool_result: async (context: unknown) => {
+        if (!state?.initialized) return;
+
+        const ctx = context as {
+          actionId?: string;
+          toolName?: string;
+          result?: unknown;
+          durationMs?: number;
+          error?: string;
+          // File tool specific
+          filePath?: string;
+          operation?: string;
+          beforeHash?: string;
+          afterHash?: string;
+          // Command tool specific
+          command?: string;
+          exitCode?: number;
+          stdout?: string;
+          stderr?: string;
+          workingDir?: string;
+        };
+
+        if (!ctx.actionId) return;
+
+        try {
+          // Complete the action
+          await state.receiptCollector.completeAction(
+            ctx.actionId,
+            ctx.result,
+            ctx.durationMs ?? 0,
+            ctx.error
+          );
+
+          // Create file receipt if applicable
+          if (ctx.filePath && ctx.operation) {
+            await state.receiptCollector.createFileReceipt({
+              actionId: ctx.actionId,
+              filePath: ctx.filePath,
+              operation: ctx.operation as "create" | "modify" | "delete" | "read",
+              beforeHash: ctx.beforeHash,
+              afterHash: ctx.afterHash,
+            });
+          }
+
+          // Create command receipt if applicable
+          if (ctx.command !== undefined) {
+            await state.receiptCollector.createCommandReceipt({
+              actionId: ctx.actionId,
+              command: ctx.command,
+              exitCode: ctx.exitCode ?? null,
+              stdout: ctx.stdout ?? "",
+              stderr: ctx.stderr ?? "",
+              durationMs: ctx.durationMs ?? 0,
+              workingDir: ctx.workingDir,
+            });
+          }
+        } catch (error) {
+          console.error("[veridic-claw] Error completing action:", error);
+        }
+      },
     },
 
     /**
@@ -299,6 +467,39 @@ export function createVeridicPlugin(db: Database, config?: Partial<VeridicConfig
      */
     getEngine(): VeridicEngine | null {
       return state?.engine ?? null;
+    },
+
+    /**
+     * Get direct access to the MemoryBridge
+     *
+     * Allows reading/writing to the 3-layer memory system.
+     *
+     * @returns MemoryBridge instance or null if not initialized
+     */
+    getMemoryBridge(): MemoryBridge | null {
+      return state?.memoryBridge ?? null;
+    },
+
+    /**
+     * Get direct access to the LosslessBridge
+     *
+     * Allows reading/writing messages and context assembly.
+     *
+     * @returns LosslessBridge instance or null if not initialized
+     */
+    getLosslessBridge(): LosslessBridge | null {
+      return state?.losslessBridge ?? null;
+    },
+
+    /**
+     * Get direct access to the ReceiptCollector
+     *
+     * Allows manual receipt creation and querying.
+     *
+     * @returns ReceiptCollector instance or null if not initialized
+     */
+    getReceiptCollector(): ReceiptCollector | null {
+      return state?.receiptCollector ?? null;
     },
 
     /**

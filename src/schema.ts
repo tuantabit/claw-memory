@@ -97,6 +97,69 @@ CREATE INDEX IF NOT EXISTS idx_verifications_depth ON verifications(depth);
 
 CREATE INDEX IF NOT EXISTS idx_trust_scores_session ON trust_scores(session_id);
 CREATE INDEX IF NOT EXISTS idx_trust_scores_calculated ON trust_scores(calculated_at);
+
+-- ============================================
+-- Messages & Summaries Storage (LosslessBridge)
+-- ============================================
+
+-- Messages: Store conversation messages for persistence
+CREATE TABLE IF NOT EXISTS messages (
+    message_id VARCHAR PRIMARY KEY,
+    session_id VARCHAR NOT NULL,
+    role VARCHAR NOT NULL CHECK(role IN ('user', 'assistant', 'system')),
+    content TEXT NOT NULL,
+    response_id VARCHAR,
+    created_at TIMESTAMP DEFAULT current_timestamp
+);
+
+-- Summaries: DAG summarization of old message chunks
+CREATE TABLE IF NOT EXISTS summaries (
+    summary_id VARCHAR PRIMARY KEY,
+    session_id VARCHAR NOT NULL,
+    chunk_index INTEGER NOT NULL,
+    content TEXT NOT NULL,
+    message_count INTEGER DEFAULT 0,
+    start_message_id VARCHAR,
+    end_message_id VARCHAR,
+    created_at TIMESTAMP DEFAULT current_timestamp,
+    UNIQUE(session_id, chunk_index)
+);
+
+-- Message indexes
+CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id);
+CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at);
+CREATE INDEX IF NOT EXISTS idx_messages_response ON messages(response_id);
+CREATE INDEX IF NOT EXISTS idx_summaries_session ON summaries(session_id);
+
+-- ============================================
+-- Memory Entries Storage (MemoryBridge)
+-- ============================================
+
+-- Memory entries: 3-layer memory system with decay
+CREATE TABLE IF NOT EXISTS memory_entries (
+    memory_id VARCHAR PRIMARY KEY,
+    session_id VARCHAR,
+    task_id VARCHAR,
+    type VARCHAR NOT NULL CHECK(type IN ('event', 'task', 'decision', 'summary', 'note', 'verification')),
+    layer VARCHAR NOT NULL CHECK(layer IN ('short-term', 'long-term', 'digest')),
+    content TEXT NOT NULL,
+    metadata JSON,
+    importance DOUBLE DEFAULT 0.5 CHECK(importance >= 0 AND importance <= 1),
+    decay_level INTEGER DEFAULT 0 CHECK(decay_level >= 0 AND decay_level <= 3),
+    access_count INTEGER DEFAULT 0,
+    hash VARCHAR,
+    created_at TIMESTAMP DEFAULT current_timestamp,
+    accessed_at TIMESTAMP DEFAULT current_timestamp
+);
+
+-- Memory indexes
+CREATE INDEX IF NOT EXISTS idx_memory_session ON memory_entries(session_id);
+CREATE INDEX IF NOT EXISTS idx_memory_task ON memory_entries(task_id);
+CREATE INDEX IF NOT EXISTS idx_memory_type ON memory_entries(type);
+CREATE INDEX IF NOT EXISTS idx_memory_layer ON memory_entries(layer);
+CREATE INDEX IF NOT EXISTS idx_memory_importance ON memory_entries(importance DESC);
+CREATE INDEX IF NOT EXISTS idx_memory_decay ON memory_entries(decay_level);
+CREATE INDEX IF NOT EXISTS idx_memory_accessed ON memory_entries(accessed_at DESC);
 `;
 
 /**
@@ -134,6 +197,34 @@ END;
 CREATE TRIGGER IF NOT EXISTS claims_fts_delete AFTER DELETE ON claims BEGIN
     INSERT INTO claims_fts(claims_fts, rowid, claim_id, original_text, claim_type)
     VALUES('delete', OLD.rowid, OLD.claim_id, OLD.original_text, OLD.claim_type);
+END;
+
+-- FTS5 for memory entries search
+CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
+    memory_id,
+    content,
+    type,
+    content='memory_entries',
+    content_rowid='rowid',
+    tokenize='porter unicode61'
+);
+
+-- Triggers for memory FTS sync
+CREATE TRIGGER IF NOT EXISTS memory_fts_insert AFTER INSERT ON memory_entries BEGIN
+    INSERT INTO memory_fts(rowid, memory_id, content, type)
+    VALUES (NEW.rowid, NEW.memory_id, NEW.content, NEW.type);
+END;
+
+CREATE TRIGGER IF NOT EXISTS memory_fts_update AFTER UPDATE ON memory_entries BEGIN
+    INSERT INTO memory_fts(memory_fts, rowid, memory_id, content, type)
+    VALUES('delete', OLD.rowid, OLD.memory_id, OLD.content, OLD.type);
+    INSERT INTO memory_fts(rowid, memory_id, content, type)
+    VALUES (NEW.rowid, NEW.memory_id, NEW.content, NEW.type);
+END;
+
+CREATE TRIGGER IF NOT EXISTS memory_fts_delete AFTER DELETE ON memory_entries BEGIN
+    INSERT INTO memory_fts(memory_fts, rowid, memory_id, content, type)
+    VALUES('delete', OLD.rowid, OLD.memory_id, OLD.content, OLD.type);
 END;
 `;
 
@@ -223,6 +314,74 @@ CREATE INDEX IF NOT EXISTS idx_compaction_history_started ON compaction_history(
 `;
 
 /**
+ * Schema for receipt tables (action tracking)
+ *
+ * Creates tables for tracking agent actions and their results.
+ * Used for verification of agent claims against actual evidence.
+ */
+export const RECEIPT_SCHEMA = `
+-- ============================================
+-- Receipt Tables (Action Tracking)
+-- ============================================
+
+-- Actions: Record of every tool call
+CREATE TABLE IF NOT EXISTS actions (
+    action_id VARCHAR PRIMARY KEY,
+    session_id VARCHAR NOT NULL,
+    task_id VARCHAR,
+    tool_name VARCHAR NOT NULL,
+    tool_input JSON,
+    tool_result JSON,
+    status VARCHAR DEFAULT 'pending' CHECK(status IN ('pending', 'success', 'error')),
+    error_message TEXT,
+    duration_ms INTEGER,
+    created_at TIMESTAMP DEFAULT current_timestamp,
+    completed_at TIMESTAMP
+);
+
+-- File Receipts: Evidence of file operations
+CREATE TABLE IF NOT EXISTS file_receipts (
+    receipt_id VARCHAR PRIMARY KEY,
+    action_id VARCHAR NOT NULL REFERENCES actions(action_id),
+    file_path VARCHAR NOT NULL,
+    operation VARCHAR NOT NULL CHECK(operation IN ('create', 'modify', 'delete', 'read')),
+    before_hash VARCHAR,
+    after_hash VARCHAR,
+    before_size INTEGER,
+    after_size INTEGER,
+    created_at TIMESTAMP DEFAULT current_timestamp
+);
+
+-- Command Receipts: Evidence of command executions
+CREATE TABLE IF NOT EXISTS command_receipts (
+    receipt_id VARCHAR PRIMARY KEY,
+    action_id VARCHAR NOT NULL REFERENCES actions(action_id),
+    command TEXT NOT NULL,
+    working_dir VARCHAR,
+    exit_code INTEGER,
+    stdout_summary TEXT,
+    stderr_summary TEXT,
+    duration_ms INTEGER,
+    created_at TIMESTAMP DEFAULT current_timestamp
+);
+
+-- Action indexes
+CREATE INDEX IF NOT EXISTS idx_actions_session ON actions(session_id);
+CREATE INDEX IF NOT EXISTS idx_actions_task ON actions(task_id);
+CREATE INDEX IF NOT EXISTS idx_actions_tool ON actions(tool_name);
+CREATE INDEX IF NOT EXISTS idx_actions_status ON actions(status);
+CREATE INDEX IF NOT EXISTS idx_actions_created ON actions(created_at DESC);
+
+-- Receipt indexes
+CREATE INDEX IF NOT EXISTS idx_file_receipts_action ON file_receipts(action_id);
+CREATE INDEX IF NOT EXISTS idx_file_receipts_path ON file_receipts(file_path);
+CREATE INDEX IF NOT EXISTS idx_file_receipts_operation ON file_receipts(operation);
+
+CREATE INDEX IF NOT EXISTS idx_command_receipts_action ON command_receipts(action_id);
+CREATE INDEX IF NOT EXISTS idx_command_receipts_exit ON command_receipts(exit_code);
+`;
+
+/**
  * Initialize the Veridic database schema
  *
  * Creates all required tables and indexes. Safe to call multiple times
@@ -236,6 +395,7 @@ export async function initVeridicSchema(
 ): Promise<void> {
   await db.execute(VERIDIC_SCHEMA);
   await db.execute(COMPACTION_SCHEMA);
+  await db.execute(RECEIPT_SCHEMA);
 
   try {
     await db.execute(FTS_SCHEMA);

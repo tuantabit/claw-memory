@@ -124,7 +124,7 @@ export class UnifiedAssembler {
       averageImportance: number;
     };
   }> {
-    const messageCount = this.losslessBridge.getMessageCount(sessionId);
+    const messageCount = await this.losslessBridge.getMessageCount(sessionId);
     const memoryStats = await this.memoryBridge.getStats(sessionId);
 
     return {

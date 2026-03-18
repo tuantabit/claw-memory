@@ -19,6 +19,7 @@ import { FileEvidenceSource } from "./sources/file-source.js";
 import { CommandEvidenceSource } from "./sources/command-source.js";
 import { ToolEvidenceSource } from "./sources/tool-source.js";
 import { GitEvidenceSource } from "./sources/git-source.js";
+import { ReceiptSource } from "./sources/receipt-source.js";
 
 /**
  * Result of collecting evidence for a claim
@@ -60,6 +61,7 @@ export class EvidenceCollector {
   private commandSource: CommandEvidenceSource;
   private toolSource: ToolEvidenceSource;
   private gitSource: GitEvidenceSource;
+  private receiptSource: ReceiptSource;
 
   /**
    * Create a new evidence collector
@@ -72,6 +74,7 @@ export class EvidenceCollector {
     this.commandSource = new CommandEvidenceSource(db);
     this.toolSource = new ToolEvidenceSource(db);
     this.gitSource = new GitEvidenceSource(cwd);
+    this.receiptSource = new ReceiptSource(db);
   }
 
   /**
@@ -110,6 +113,11 @@ export class EvidenceCollector {
     if (sources.includes("git")) {
       sourcesChecked.push("git");
       collectionPromises.push(this.gitSource.collectForClaim(claim));
+    }
+
+    if (sources.includes("receipt")) {
+      sourcesChecked.push("receipt");
+      collectionPromises.push(this.receiptSource.collect(claim));
     }
 
     const results = await Promise.all(collectionPromises);
@@ -165,23 +173,34 @@ export class EvidenceCollector {
    * @param claimType - The type of claim
    * @returns Array of source names to check
    */
+  /**
+   * Determine which evidence sources are relevant for a claim type
+   *
+   * Each claim type maps to specific sources that can provide
+   * meaningful evidence. Receipt source is included for all
+   * file and command related claims for verification against
+   * actual action records.
+   *
+   * @param claimType - The type of claim
+   * @returns Array of source names to check
+   */
   private getSourcesForClaimType(
     claimType: ClaimType
-  ): Array<"file" | "command" | "tool" | "git"> {
-    const sourceMap: Record<ClaimType, Array<"file" | "command" | "tool" | "git">> = {
-      file_created: ["file", "tool", "git"],
-      file_modified: ["file", "tool", "git"],
-      file_deleted: ["file", "tool", "git"],
-      code_added: ["file", "tool", "git"],
-      code_removed: ["file", "tool", "git"],
-      code_fixed: ["file", "tool", "git"],
-      command_executed: ["command", "tool"],
-      test_passed: ["command", "tool"],
-      test_failed: ["command", "tool"],
-      error_fixed: ["file", "command", "tool"],
-      dependency_added: ["command", "tool", "file"],
-      config_changed: ["file", "tool", "git"],
-      task_completed: ["tool"],
+  ): Array<"file" | "command" | "tool" | "git" | "receipt"> {
+    const sourceMap: Record<ClaimType, Array<"file" | "command" | "tool" | "git" | "receipt">> = {
+      file_created: ["file", "tool", "git", "receipt"],
+      file_modified: ["file", "tool", "git", "receipt"],
+      file_deleted: ["file", "tool", "git", "receipt"],
+      code_added: ["file", "tool", "git", "receipt"],
+      code_removed: ["file", "tool", "git", "receipt"],
+      code_fixed: ["file", "tool", "git", "receipt"],
+      command_executed: ["command", "tool", "receipt"],
+      test_passed: ["command", "tool", "receipt"],
+      test_failed: ["command", "tool", "receipt"],
+      error_fixed: ["file", "command", "tool", "receipt"],
+      dependency_added: ["command", "tool", "file", "receipt"],
+      config_changed: ["file", "tool", "git", "receipt"],
+      task_completed: ["tool", "receipt"],
       unknown: ["tool"],
     };
 
