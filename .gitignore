@@ -12,3 +12,7 @@ tui/veridic-tui-*
 # Markdown files (except README)
 *.md
 !README.md
+
+# Test files
+*.test.ts
+*.spec.ts

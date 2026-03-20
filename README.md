@@ -9,13 +9,21 @@ Unified memory and verification system for AI agents. Solves three critical prob
 ## How it works
 
 ```
-Agent Action → Receipt Created → Claim Extracted → Verified Against Receipt → Trust Score Updated
+Agent Action → Receipt Created → Claim Extracted → Verified Against Receipt
+                                                            ↓
+                                             Contradiction? → Auto Retry (max 2)
+                                                            ↓
+                                             Still failed? → Warn User
+                                                            ↓
+                                             Trust Score Updated
 ```
 
 When an agent performs actions, claw-memory:
 - **Captures receipts** (file hashes, command outputs) as immutable proof
 - **Extracts claims** from agent responses ("I created X", "I fixed Y")
 - **Verifies claims** against receipts
+- **Auto-retries** contradicted claims up to 2 times
+- **Warns user** if retries fail
 - **Updates trust score** based on verification history
 - **Persists everything** to SQLite for cross-session memory
 
@@ -52,46 +60,145 @@ const plugin = createVeridicPlugin(db, {
   autoVerify: true,
   trustWarningThreshold: 70,
   trustBlockThreshold: 30,
+  retry: {
+    enabled: true,
+    maxRetries: 2,
+    notifyUser: true,
+  },
 });
 
 // Plugin provides hooks:
 // - before_agent_start: Check trust, inject warnings
 // - on_tool_call: Create action record
 // - on_tool_result: Create file/command receipts
-// - agent_end: Extract claims, verify, update trust
+// - agent_end: Extract claims, verify, auto-retry, update trust
 ```
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                       CLAW-MEMORY                            │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│  ┌───────────────┐  ┌───────────────┐  ┌─────────────────┐  │
-│  │ LOSSLESS      │  │ MEMORY        │  │ VERIFICATION    │  │
-│  │ BRIDGE        │  │ BRIDGE        │  │ ENGINE          │  │
-│  ├───────────────┤  ├───────────────┤  ├─────────────────┤  │
-│  │ Messages      │  │ Short-term    │  │ Claim Extractor │  │
-│  │ Summaries     │  │ Long-term     │  │ Evidence Collect│  │
-│  │ Context Asm   │  │ Digest + FTS5 │  │ Trust Scoring   │  │
-│  └───────────────┘  └───────────────┘  └─────────────────┘  │
-│         │                  │                   │             │
-│         └──────────────────┼───────────────────┘             │
-│                            │                                 │
-│                   ┌────────┴────────┐                       │
-│                   │ RECEIPT SYSTEM   │                       │
-│                   │ file | command   │                       │
-│                   └─────────────────┘                        │
-│                            │                                 │
-│                   ┌────────┴────────┐                       │
-│                   │     SQLite       │                       │
-│                   │  (node:sqlite)   │                       │
-│                   └─────────────────┘                        │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│                           CLAW-MEMORY v0.2                               │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────────┐  │
+│  │ LOSSLESS    │  │ MEMORY      │  │ VERIFY      │  │ AUTO RETRY      │  │
+│  │ BRIDGE      │  │ BRIDGE      │  │ ENGINE      │  │ SYSTEM          │  │
+│  ├─────────────┤  ├─────────────┤  ├─────────────┤  ├─────────────────┤  │
+│  │ Messages    │  │ Short-term  │  │ Claim       │  │ Max 2 retries   │  │
+│  │ Summaries   │  │ Long-term   │  │ Evidence    │  │ User notify     │  │
+│  │ Context Asm │  │ Digest+FTS5 │  │ Trust Score │  │ Retry prompts   │  │
+│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────────┘  │
+│         │                │                │                  │           │
+│  ┌──────┴────────────────┴────────────────┴──────────────────┘           │
+│  │                                                                       │
+│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────────┐   │
+│  │  │ VECTOR      │  │ KNOWLEDGE   │  │ TEMPORAL                    │   │
+│  │  │ SEARCH      │  │ GRAPH       │  │ MEMORY                      │   │
+│  │  ├─────────────┤  ├─────────────┤  ├─────────────────────────────┤   │
+│  │  │ Embeddings  │  │ Entities    │  │ Timeline queries            │   │
+│  │  │ Cosine sim  │  │ Relations   │  │ "last week", "3 days ago"   │   │
+│  │  │ 128-dim     │  │ BFS paths   │  │ Event aggregation           │   │
+│  │  └─────────────┘  └─────────────┘  └─────────────────────────────┘   │
+│  │                                                                       │
+│  └───────────────────────────┬───────────────────────────────────────────┘
+│                              │                                           │
+│                     ┌────────┴────────┐                                 │
+│                     │ RECEIPT SYSTEM   │                                 │
+│                     │ file | command   │                                 │
+│                     └─────────────────┘                                  │
+│                              │                                           │
+│                     ┌────────┴────────┐                                 │
+│                     │     SQLite       │                                 │
+│                     │  (node:sqlite)   │                                 │
+│                     └─────────────────┘                                  │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Core components
+
+### Auto Retry System
+
+Automatically retries contradicted claims:
+
+```typescript
+// When claim is contradicted:
+// 1. Generate retry prompt specific to claim type
+// 2. Send to agent for actual execution
+// 3. Re-verify the claim
+// 4. Repeat up to maxRetries (default: 2)
+// 5. Notify user if all retries fail
+
+const retryResult = {
+  success: false,
+  retriesAttempted: 2,
+  finalStatus: 'max_retries_exceeded',
+  userNotification: '[VERIFICATION FAILED] Claim: "I created src/app.ts"...',
+  suggestions: ['Check if the file path is correct', 'Run manually...'],
+};
+```
+
+### Vector Search (Semantic Memory)
+
+Find similar memories without exact keyword matching:
+
+```typescript
+// Store memory with embedding
+const embedding = await embeddingService.embed("Created auth service");
+await vectorStore.store(memoryId, sessionId, embedding, "local");
+
+// Search semantically
+const query = await embeddingService.embed("login authentication");
+const results = await vectorStore.search(query, { limit: 5 });
+// Returns: [{ memoryId, similarity: 0.85 }, ...]
+```
+
+Features:
+- 128-dimensional hash-based embeddings (no external API needed)
+- Cosine similarity search
+- Session-scoped queries
+
+### Knowledge Graph
+
+Track entity relationships:
+
+```typescript
+// Entities: file, function, class, component, command, package, test, error
+// Relationships: CONTAINS, IMPORTS, DEPENDS_ON, CALLS, TESTS, FIXES
+
+// Extract from claims
+const { entities, relationships } = await graphService.processClaim(claim);
+
+// Find path between entities
+const path = await graphService.findPath(fileEntityId, testEntityId);
+// Returns: { nodes: [file, function, test], edges: [CONTAINS, TESTS] }
+
+// Get neighbors
+const neighbors = await graphService.getNeighbors(entityId, depth=2);
+```
+
+### Temporal Memory
+
+Query by time with natural language:
+
+```typescript
+// Supported expressions:
+// - "today", "yesterday"
+// - "last week", "this month"
+// - "3 days ago", "last 5 hours"
+// - "2 weeks ago", "last 3 months"
+
+const events = await timelineService.queryByTimeExpression(
+  sessionId,
+  "last week"
+);
+
+// Get timeline segments
+const segments = await timelineService.getTimelineSegments(
+  sessionId,
+  "day" // or "hour", "week", "month"
+);
+```
 
 ### Receipt Collector
 
@@ -143,15 +250,6 @@ Digest       │ Forever   │ -       │ Compressed summaries
 
 Decay levels: `FULL → SUMMARY → ESSENCE → HASH`
 
-### Lossless Bridge
-
-Context management with DAG summarization:
-
-- Stores all messages permanently
-- Creates hierarchical summaries
-- Assembles context within token limits
-- Supports LLM-based summarization
-
 ### Trust Scoring
 
 ```
@@ -179,6 +277,8 @@ VERIDIC_VERIFICATION_THRESHOLD=0.7
 VERIDIC_WARNING_THRESHOLD=70      # Trust score warning
 VERIDIC_BLOCK_THRESHOLD=30        # Trust score block
 VERIDIC_AUTO_VERIFY=true
+VERIDIC_RETRY_ENABLED=true        # Auto-retry on contradiction
+VERIDIC_RETRY_MAX=2               # Max retry attempts
 ```
 
 ### Programmatic config
@@ -192,6 +292,12 @@ createVeridicPlugin(db, {
   trustBlockThreshold: 30,
   autoVerify: true,
   maxClaimsPerSession: 1000,
+  retry: {
+    enabled: true,
+    maxRetries: 2,
+    notifyUser: true,
+    minContradictionConfidence: 0.7,
+  },
   compaction: {
     retentionDays: 30,
     preserveContradicted: true,
@@ -222,14 +328,20 @@ messages, summaries
 -- Memory with FTS5 search
 memory_entries, memory_fts
 
+-- Vector embeddings (Semantic)
+memory_vectors
+
+-- Knowledge Graph
+entities, relationships
+
+-- Temporal Events
+temporal_events
+
 -- Receipts (proof of actions)
 actions, file_receipts, command_receipts
 
 -- Verification
 claims, evidence, verifications, trust_scores
-
--- Linking tables
-claim_receipts, message_claims, verification_memories
 ```
 
 ### Archive tables
@@ -243,14 +355,39 @@ claims_archive, evidence_archive, daily_summaries, compaction_history
 ```
 src/
 ├── index.ts                    # Entry point
-├── engine.ts                   # VeridicEngine
-├── plugin.ts                   # OpenClaw plugin
+├── engine.ts                   # VeridicEngine (main orchestrator)
+├── plugin.ts                   # OpenClaw plugin with hooks
 ├── schema.ts                   # Database schema
 ├── config.ts                   # Configuration
 ├── types.ts                    # Type definitions
 │
 ├── core/
 │   └── database.ts             # SQLite wrapper (node:sqlite)
+│
+├── retry/                      # Auto-retry system
+│   ├── types.ts                # Retry types and config
+│   ├── retry-prompt.ts         # Prompt generation per claim type
+│   ├── retry-manager.ts        # Retry orchestration
+│   └── index.ts
+│
+├── memory/                     # Vector search (semantic)
+│   ├── types.ts                # Embedding types
+│   ├── embedding-service.ts    # Hash-based local embeddings
+│   ├── vector-store.ts         # SQLite BLOB storage + cosine search
+│   └── index.ts
+│
+├── graph/                      # Knowledge graph
+│   ├── types.ts                # Entity and relationship types
+│   ├── entity-store.ts         # Entity CRUD with normalization
+│   ├── relationship-store.ts   # Relationship CRUD
+│   ├── graph-service.ts        # BFS path finding, neighbor discovery
+│   └── index.ts
+│
+├── temporal/                   # Temporal memory
+│   ├── types.ts                # Event types
+│   ├── temporal-store.ts       # Time-based event storage
+│   ├── timeline-service.ts     # Natural language time parsing
+│   └── index.ts
 │
 ├── store/
 │   ├── claim-store.ts
