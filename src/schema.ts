@@ -160,6 +160,93 @@ CREATE INDEX IF NOT EXISTS idx_memory_layer ON memory_entries(layer);
 CREATE INDEX IF NOT EXISTS idx_memory_importance ON memory_entries(importance DESC);
 CREATE INDEX IF NOT EXISTS idx_memory_decay ON memory_entries(decay_level);
 CREATE INDEX IF NOT EXISTS idx_memory_accessed ON memory_entries(accessed_at DESC);
+
+-- ============================================
+-- Vector Embeddings Storage (Semantic Search)
+-- ============================================
+
+-- Memory vectors: Embeddings for semantic search
+-- Note: No FOREIGN KEY - vectors can be stored for any ID (claims, memories, entities, etc.)
+CREATE TABLE IF NOT EXISTS memory_vectors (
+    vector_id VARCHAR PRIMARY KEY,
+    memory_id VARCHAR NOT NULL,
+    session_id VARCHAR NOT NULL,
+    embedding BLOB NOT NULL,
+    embedding_model VARCHAR NOT NULL,
+    created_at TIMESTAMP DEFAULT current_timestamp
+);
+
+CREATE INDEX IF NOT EXISTS idx_vectors_memory ON memory_vectors(memory_id);
+CREATE INDEX IF NOT EXISTS idx_vectors_session ON memory_vectors(session_id);
+CREATE INDEX IF NOT EXISTS idx_vectors_model ON memory_vectors(embedding_model);
+
+-- ============================================
+-- Knowledge Graph (Entity Relations)
+-- ============================================
+
+-- Entities: Nodes in the knowledge graph
+CREATE TABLE IF NOT EXISTS entities (
+    entity_id VARCHAR PRIMARY KEY,
+    session_id VARCHAR NOT NULL,
+    type VARCHAR NOT NULL CHECK(type IN ('file', 'function', 'class', 'component', 'command', 'package', 'test', 'error')),
+    name VARCHAR NOT NULL,
+    normalized_name VARCHAR,
+    first_seen_at TIMESTAMP DEFAULT current_timestamp,
+    last_seen_at TIMESTAMP DEFAULT current_timestamp,
+    occurrence_count INTEGER DEFAULT 1,
+    metadata JSON,
+    UNIQUE(session_id, type, normalized_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_entities_session ON entities(session_id);
+CREATE INDEX IF NOT EXISTS idx_entities_type ON entities(type);
+CREATE INDEX IF NOT EXISTS idx_entities_name ON entities(normalized_name);
+CREATE INDEX IF NOT EXISTS idx_entities_last_seen ON entities(last_seen_at DESC);
+
+-- Relationships: Edges in the knowledge graph
+CREATE TABLE IF NOT EXISTS relationships (
+    relationship_id VARCHAR PRIMARY KEY,
+    session_id VARCHAR NOT NULL,
+    from_entity_id VARCHAR NOT NULL,
+    to_entity_id VARCHAR NOT NULL,
+    type VARCHAR NOT NULL CHECK(type IN ('CONTAINS', 'IMPORTS', 'DEPENDS_ON', 'CALLS', 'TESTS', 'FIXES', 'CREATED_BY', 'MODIFIED_BY')),
+    source_claim_id VARCHAR,
+    confidence REAL DEFAULT 1.0,
+    first_observed_at TIMESTAMP DEFAULT current_timestamp,
+    last_observed_at TIMESTAMP DEFAULT current_timestamp,
+    observation_count INTEGER DEFAULT 1,
+    metadata JSON,
+    FOREIGN KEY(from_entity_id) REFERENCES entities(entity_id) ON DELETE CASCADE,
+    FOREIGN KEY(to_entity_id) REFERENCES entities(entity_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_relationships_session ON relationships(session_id);
+CREATE INDEX IF NOT EXISTS idx_relationships_from ON relationships(from_entity_id);
+CREATE INDEX IF NOT EXISTS idx_relationships_to ON relationships(to_entity_id);
+CREATE INDEX IF NOT EXISTS idx_relationships_type ON relationships(type);
+
+-- ============================================
+-- Temporal Events (Timeline)
+-- ============================================
+
+-- Temporal events: Events with timestamps for timeline queries
+CREATE TABLE IF NOT EXISTS temporal_events (
+    event_id VARCHAR PRIMARY KEY,
+    session_id VARCHAR NOT NULL,
+    event_type VARCHAR NOT NULL CHECK(event_type IN ('CLAIM', 'VERIFICATION', 'ACTION', 'ENTITY_CREATED', 'ENTITY_MODIFIED', 'RELATIONSHIP_CREATED')),
+    entity_id VARCHAR,
+    claim_id VARCHAR,
+    relationship_id VARCHAR,
+    event_data JSON,
+    occurred_at TIMESTAMP NOT NULL,
+    recorded_at TIMESTAMP DEFAULT current_timestamp
+);
+
+CREATE INDEX IF NOT EXISTS idx_temporal_session ON temporal_events(session_id);
+CREATE INDEX IF NOT EXISTS idx_temporal_type ON temporal_events(event_type);
+CREATE INDEX IF NOT EXISTS idx_temporal_occurred ON temporal_events(occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_temporal_entity ON temporal_events(entity_id);
+CREATE INDEX IF NOT EXISTS idx_temporal_claim ON temporal_events(claim_id);
 `;
 
 /**

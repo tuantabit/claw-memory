@@ -27,6 +27,35 @@ import { createClaimExtractor, ClaimExtractor } from "./extractor/index.js";
 import { createEvidenceCollector, EvidenceCollector } from "./collector/index.js";
 import { createClaimVerifier, ClaimVerifier, FullVerificationResult } from "./verifier/index.js";
 
+// v0.2 imports
+import {
+  LocalEmbeddingService,
+  VectorStore,
+  createEmbeddingService,
+  createVectorStore,
+  type EmbeddingService,
+  type SimilarityResult,
+} from "./memory/index.js";
+import {
+  GraphService,
+  createGraphService,
+  type Entity,
+  type Relationship,
+  type EntityWithRelationships,
+  type GraphPath,
+  type GraphStats,
+} from "./graph/index.js";
+import {
+  TemporalStore,
+  TimelineService,
+  createTemporalStore,
+  createTimelineService,
+  type TemporalEvent,
+  type TemporalStats,
+  type TimelineSegment,
+  type ParsedTimeRange,
+} from "./temporal/index.js";
+
 /**
  * Internal state of the engine
  */
@@ -61,6 +90,13 @@ export class VeridicEngine {
   private state: EngineState;
   private deps: VeridicDependencies | null = null;
 
+  // v0.2 additions: Vector Search, Knowledge Graph, Temporal Memory
+  private embeddingService: EmbeddingService;
+  private vectorStore: VectorStore;
+  private graphService: GraphService;
+  private temporalStore: TemporalStore;
+  private timelineService: TimelineService;
+
   constructor(db: Database, config?: Partial<VeridicConfig>) {
     this.db = db;
     this.config = resolveConfig({ ...getConfigFromEnv(), ...config });
@@ -73,6 +109,13 @@ export class VeridicEngine {
       currentSessionId: null,
       currentTaskId: null,
     };
+
+    // v0.2: Initialize Vector Search, Knowledge Graph, Temporal Memory
+    this.embeddingService = createEmbeddingService();
+    this.vectorStore = createVectorStore(db);
+    this.graphService = createGraphService(db);
+    this.temporalStore = createTemporalStore(db);
+    this.timelineService = createTimelineService(db);
   }
 
   /**
@@ -471,6 +514,264 @@ export class VeridicEngine {
    */
   getConfig(): VeridicConfig {
     return this.config;
+  }
+
+  // ============================================
+  // v0.2 Methods: Vector Search, Knowledge Graph, Temporal Memory
+  // ============================================
+
+  /**
+   * Search memory semantically using embeddings
+   * Finds similar memories even without exact keyword match
+   *
+   * @param query - Search query text
+   * @param sessionId - Optional session ID (uses current if not provided)
+   * @param limit - Maximum results to return
+   * @returns Similar memory entries with similarity scores
+   */
+  async searchSemantic(
+    query: string,
+    sessionId?: string,
+    limit = 10
+  ): Promise<SimilarityResult[]> {
+    const sid = sessionId ?? this.state.currentSessionId;
+    if (!sid) return [];
+
+    const queryEmbedding = await this.embeddingService.embed(query);
+    return this.vectorStore.search(queryEmbedding, { sessionId: sid, limit });
+  }
+
+  /**
+   * Store an embedding for a memory entry
+   *
+   * @param memoryId - ID of the memory entry
+   * @param sessionId - Session ID
+   * @param text - Text to embed
+   * @returns Vector ID
+   */
+  async storeEmbedding(
+    memoryId: string,
+    sessionId: string,
+    text: string
+  ): Promise<string> {
+    const embedding = await this.embeddingService.embed(text);
+    return this.vectorStore.store(memoryId, sessionId, embedding, "local");
+  }
+
+  /**
+   * Process a claim to build knowledge graph
+   * Extracts entities and relationships from the claim
+   *
+   * @param claim - The claim to process
+   * @returns Extracted entities and relationships
+   */
+  async processClaimForGraph(
+    claim: Claim
+  ): Promise<{ entities: Entity[]; relationships: Relationship[] }> {
+    return this.graphService.processClaim(claim);
+  }
+
+  /**
+   * Get entity with all relationships
+   *
+   * @param entityId - Entity ID
+   * @returns Entity with outgoing and incoming relationships
+   */
+  async getEntityWithRelationships(
+    entityId: string
+  ): Promise<EntityWithRelationships | null> {
+    return this.graphService.getEntityWithRelationships(entityId);
+  }
+
+  /**
+   * Find path between two entities in the knowledge graph
+   *
+   * @param fromEntityId - Starting entity ID
+   * @param toEntityId - Target entity ID
+   * @param maxDepth - Maximum path depth
+   * @returns Graph path or null if not found
+   */
+  async findGraphPath(
+    fromEntityId: string,
+    toEntityId: string,
+    maxDepth = 5
+  ): Promise<GraphPath | null> {
+    return this.graphService.findPath(fromEntityId, toEntityId, maxDepth);
+  }
+
+  /**
+   * Search entities by name pattern
+   *
+   * @param pattern - Search pattern
+   * @param sessionId - Optional session ID
+   * @returns Matching entities
+   */
+  async searchEntities(pattern: string, sessionId?: string): Promise<Entity[]> {
+    const sid = sessionId ?? this.state.currentSessionId;
+    if (!sid) return [];
+    return this.graphService.searchEntities(sid, pattern);
+  }
+
+  /**
+   * Get graph statistics
+   *
+   * @param sessionId - Optional session ID
+   * @returns Graph statistics
+   */
+  async getGraphStats(sessionId?: string): Promise<GraphStats | null> {
+    const sid = sessionId ?? this.state.currentSessionId;
+    if (!sid) return null;
+    return this.graphService.getStats(sid);
+  }
+
+  /**
+   * Record a temporal event
+   *
+   * @param eventType - Type of event
+   * @param sessionId - Session ID
+   * @param options - Additional options
+   * @returns Created temporal event
+   */
+  async recordTemporalEvent(
+    eventType: TemporalEvent["eventType"],
+    sessionId?: string,
+    options?: {
+      entityId?: string;
+      claimId?: string;
+      relationshipId?: string;
+      eventData?: Record<string, unknown>;
+      occurredAt?: Date;
+    }
+  ): Promise<TemporalEvent> {
+    const sid = sessionId ?? this.state.currentSessionId;
+    if (!sid) throw new Error("No session specified");
+
+    return this.temporalStore.create({
+      sessionId: sid,
+      eventType,
+      entityId: options?.entityId,
+      claimId: options?.claimId,
+      relationshipId: options?.relationshipId,
+      eventData: options?.eventData,
+      occurredAt: options?.occurredAt,
+    });
+  }
+
+  /**
+   * Query events by natural language time expression
+   * Examples: "last week", "3 days ago", "today"
+   *
+   * @param expression - Natural language time expression
+   * @param sessionId - Optional session ID
+   * @returns Events in the time range
+   */
+  async queryByTime(
+    expression: string,
+    sessionId?: string
+  ): Promise<TemporalEvent[]> {
+    const sid = sessionId ?? this.state.currentSessionId;
+    if (!sid) return [];
+
+    return this.timelineService.queryByTimeExpression(sid, expression);
+  }
+
+  /**
+   * Get timeline of events
+   *
+   * @param options - Timeline options
+   * @returns Events in chronological order
+   */
+  async getTimeline(
+    options?: {
+      sessionId?: string;
+      startTime?: Date;
+      endTime?: Date;
+      limit?: number;
+    }
+  ): Promise<TemporalEvent[]> {
+    const sid = options?.sessionId ?? this.state.currentSessionId;
+    if (!sid) return [];
+
+    return this.timelineService.getTimeline(sid, {
+      startTime: options?.startTime,
+      endTime: options?.endTime,
+      limit: options?.limit,
+    });
+  }
+
+  /**
+   * Get timeline segmented by time period
+   *
+   * @param segmentDuration - Segment duration (hour, day, week, month)
+   * @param sessionId - Optional session ID
+   * @returns Timeline segments
+   */
+  async getTimelineSegments(
+    segmentDuration: "hour" | "day" | "week" | "month",
+    sessionId?: string
+  ): Promise<TimelineSegment[]> {
+    const sid = sessionId ?? this.state.currentSessionId;
+    if (!sid) return [];
+
+    return this.timelineService.getTimelineSegments(sid, segmentDuration);
+  }
+
+  /**
+   * Get activity summary for a time period
+   *
+   * @param expression - Natural language time expression
+   * @param sessionId - Optional session ID
+   * @returns Activity summary
+   */
+  async getActivitySummary(
+    expression: string,
+    sessionId?: string
+  ): Promise<{
+    timeRange: ParsedTimeRange;
+    totalEvents: number;
+    byType: Partial<Record<TemporalEvent["eventType"], number>>;
+    peakHour?: number;
+  } | null> {
+    const sid = sessionId ?? this.state.currentSessionId;
+    if (!sid) return null;
+
+    return this.timelineService.getActivitySummary(sid, expression);
+  }
+
+  /**
+   * Get temporal statistics
+   *
+   * @param sessionId - Optional session ID
+   * @returns Temporal statistics
+   */
+  async getTemporalStats(sessionId?: string): Promise<TemporalStats | null> {
+    const sid = sessionId ?? this.state.currentSessionId;
+    if (!sid) return null;
+
+    return this.temporalStore.getStats(sid);
+  }
+
+  /**
+   * Get direct access to v0.2 services
+   */
+  getEmbeddingService(): EmbeddingService {
+    return this.embeddingService;
+  }
+
+  getVectorStore(): VectorStore {
+    return this.vectorStore;
+  }
+
+  getGraphService(): GraphService {
+    return this.graphService;
+  }
+
+  getTemporalStore(): TemporalStore {
+    return this.temporalStore;
+  }
+
+  getTimelineService(): TimelineService {
+    return this.timelineService;
   }
 }
 

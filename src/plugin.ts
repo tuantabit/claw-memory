@@ -25,13 +25,14 @@
  */
 
 import type { Database } from "./core/database.js";
-import type { VeridicConfig, LLMApi } from "./types.js";
+import type { VeridicConfig, LLMApi, Verification, Claim } from "./types.js";
 import { VeridicEngine, createVeridicEngine } from "./engine.js";
 import { createVeridicTools } from "./tools/index.js";
 import { resolveConfig } from "./config.js";
 import { ReceiptCollector, createReceiptCollector } from "./collector/receipt-collector.js";
 import { MemoryBridge, createPersistentMemoryBridge } from "./shared/memory-bridge.js";
 import { LosslessBridge, createPersistentLosslessBridge } from "./context/lossless-bridge.js";
+import { RetryManager, createRetryManager, type RetryExecutor, type UserNotifier } from "./retry/index.js";
 
 /**
  * Internal plugin state
@@ -44,6 +45,7 @@ interface PluginState {
   receiptCollector: ReceiptCollector;
   memoryBridge: MemoryBridge;
   losslessBridge: LosslessBridge;
+  retryManager: RetryManager;
   initialized: boolean;
 }
 
@@ -95,11 +97,16 @@ async function initializePlugin(
     trustWarningThreshold: config?.trustWarningThreshold ?? 70,
   });
 
+  // Create retry manager for auto-retry on contradictions
+  const resolvedCfg = resolveConfig(config);
+  const retryManager = createRetryManager(resolvedCfg.retry);
+
   state = {
     engine,
     receiptCollector,
     memoryBridge,
     losslessBridge,
+    retryManager,
     initialized: true,
   };
 
@@ -281,14 +288,14 @@ export function createVeridicPlugin(db: Database, config?: Partial<VeridicConfig
        * Called after agent finishes responding
        *
        * Extracts claims from response, verifies them against evidence,
-       * and updates trust score. Logs warnings for contradicted claims.
+       * and updates trust score. Handles auto-retry for contradicted claims.
        */
       agent_end: async (context: unknown) => {
         if (!state?.initialized) {
           return;
         }
 
-        const { engine } = state;
+        const { engine, retryManager } = state;
 
         const response = extractAIResponse(context);
         if (!response) {
@@ -324,8 +331,45 @@ export function createVeridicPlugin(db: Database, config?: Partial<VeridicConfig
             console.warn(
               `[veridic-claw] WARNING: ${contradicted.length} false claims detected!`
             );
-            for (const c of contradicted) {
-              console.warn(`  - ${c.claim.claim_type}: "${c.claim.original_text.slice(0, 60)}..."`);
+
+            // Auto-retry for contradictions
+            const retryResults = await retryManager.handleContradictions(
+              contradicted.map((c) => ({
+                claim: c.claim,
+                verification: c.verification,
+              })),
+              async (claim: Claim): Promise<Verification> => {
+                // Re-verify the claim
+                const verifyResult = await engine.verifyClaim(claim.claim_id);
+                if (verifyResult) {
+                  return verifyResult.verification;
+                }
+                // Return a default unverified result if reverification fails
+                return {
+                  verification_id: "",
+                  claim_id: claim.claim_id,
+                  status: "unverified",
+                  evidence_ids: [],
+                  confidence: 0,
+                  details: "Re-verification failed",
+                  verified_at: new Date(),
+                };
+              }
+            );
+
+            // Log retry results
+            for (const retryResult of retryResults) {
+              if (retryResult.success) {
+                console.log(
+                  `[veridic-claw] Retry SUCCESS: ${retryResult.originalClaim.claim_type} ` +
+                    `verified after ${retryResult.retriesAttempted} attempt(s)`
+                );
+              } else if (retryResult.finalStatus === "max_retries_exceeded") {
+                console.warn(
+                  `[veridic-claw] Retry FAILED: ${retryResult.originalClaim.claim_type} ` +
+                    `- ${retryResult.userNotification || "Max retries exceeded"}`
+                );
+              }
             }
           }
         } catch (error) {
@@ -500,6 +544,44 @@ export function createVeridicPlugin(db: Database, config?: Partial<VeridicConfig
      */
     getReceiptCollector(): ReceiptCollector | null {
       return state?.receiptCollector ?? null;
+    },
+
+    /**
+     * Get direct access to the RetryManager
+     *
+     * Allows configuring retry behavior and setting callbacks.
+     *
+     * @returns RetryManager instance or null if not initialized
+     */
+    getRetryManager(): RetryManager | null {
+      return state?.retryManager ?? null;
+    },
+
+    /**
+     * Set the retry executor callback
+     *
+     * This callback is called when a contradiction is detected and retry is needed.
+     * The callback should send the retry prompt to the agent and return the response.
+     *
+     * @param executor - Callback function that executes retry
+     */
+    setRetryExecutor(executor: RetryExecutor): void {
+      if (state?.retryManager) {
+        state.retryManager.setRetryExecutor(executor);
+      }
+    },
+
+    /**
+     * Set the user notifier callback
+     *
+     * This callback is called when retry fails and user needs to be notified.
+     *
+     * @param notifier - Callback function that notifies user
+     */
+    setUserNotifier(notifier: UserNotifier): void {
+      if (state?.retryManager) {
+        state.retryManager.setUserNotifier(notifier);
+      }
     },
 
     /**

@@ -9,7 +9,12 @@ import {
   type CompactionConfig,
   DEFAULT_COMPACTION_CONFIG,
 } from "./compactor/types.js";
+import {
+  type RetryConfig,
+  DEFAULT_RETRY_CONFIG,
+} from "./retry/types.js";
 export type { CompactionConfig } from "./compactor/types.js";
+export type { RetryConfig } from "./retry/types.js";
 
 /**
  * Main configuration interface for Veridic Engine
@@ -62,6 +67,9 @@ export interface VeridicConfig {
 
   /** Database compaction settings */
   compaction: CompactionConfig;
+
+  /** Auto retry settings for contradicted claims */
+  retry: RetryConfig;
 }
 
 /**
@@ -100,6 +108,7 @@ export const DEFAULT_CONFIG: VeridicConfig = {
     unknown: 0.3,           // Unknown claims have minimal impact
   },
   compaction: DEFAULT_COMPACTION_CONFIG,
+  retry: DEFAULT_RETRY_CONFIG,
 };
 
 /**
@@ -123,6 +132,10 @@ export function resolveConfig(config?: Partial<VeridicConfig>): VeridicConfig {
     compaction: {
       ...DEFAULT_CONFIG.compaction,
       ...config.compaction,
+    },
+    retry: {
+      ...DEFAULT_CONFIG.retry,
+      ...config.retry,
     },
   };
 }
@@ -190,6 +203,25 @@ export function getConfigFromEnv(): Partial<VeridicConfig> {
 
   if (Object.keys(compaction).length > 0) {
     config.compaction = { ...DEFAULT_COMPACTION_CONFIG, ...compaction };
+  }
+
+  // Retry config from env
+  const retry: Partial<RetryConfig> = {};
+
+  if (process.env.VERIDIC_RETRY_ENABLED !== undefined) {
+    retry.enabled = process.env.VERIDIC_RETRY_ENABLED === "true";
+  }
+
+  if (process.env.VERIDIC_MAX_RETRIES) {
+    retry.maxRetries = parseInt(process.env.VERIDIC_MAX_RETRIES, 10);
+  }
+
+  if (process.env.VERIDIC_RETRY_NOTIFY_USER !== undefined) {
+    retry.notifyUser = process.env.VERIDIC_RETRY_NOTIFY_USER === "true";
+  }
+
+  if (Object.keys(retry).length > 0) {
+    config.retry = { ...DEFAULT_RETRY_CONFIG, ...retry };
   }
 
   return config;
