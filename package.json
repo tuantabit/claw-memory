@@ -1,8 +1,7 @@
 {
   "name": "@openclaw/veridic-claw",
-  "version": "2026.3.17",
-  "private": true,
-  "description": "Veridic Claw - Verify agent claims. Don't trust. Verify.",
+  "version": "0.2.0",
+  "description": "Claim verification for AI agents - detect when agents lie about their actions",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -12,12 +11,29 @@
       "import": "./dist/index.js"
     }
   },
+  "keywords": [
+    "openclaw",
+    "openclaw-plugin",
+    "ai-agent",
+    "claim-verification",
+    "trust-score",
+    "llm",
+    "memory",
+    "knowledge-graph"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist"
   },
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "openclaw.plugin.json",
+    "README.md",
+    "LICENSE"
+  ],
   "dependencies": {
     "nanoid": "^5.0.9"
   },
@@ -26,16 +42,18 @@
     "typescript": "^5.7.0"
   },
   "peerDependencies": {
-    "openclaw": ">=2026.3.11"
-  },
-  "peerDependenciesMeta": {
-    "openclaw": {
-      "optional": true
-    }
+    "openclaw": "*"
   },
   "openclaw": {
     "extensions": [
       "./dist/index.js"
     ]
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/openclaw/openclaw.git",
+    "directory": "extensions/veridic-claw"
+  },
+  "license": "MIT",
+  "author": "OpenClaw Team"
 }

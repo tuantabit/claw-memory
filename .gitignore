@@ -16,3 +16,4 @@ tui/veridic-tui-*
 # Test files
 *.test.ts
 *.spec.ts
+vitest.config.ts

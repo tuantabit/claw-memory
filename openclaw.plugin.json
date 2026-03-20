@@ -1,47 +1,88 @@
 {
   "id": "veridic-claw",
-  "kind": "verification",
+  "uiHints": {
+    "enabled": {
+      "label": "Enabled",
+      "help": "Enable or disable claim verification"
+    },
+    "autoVerify": {
+      "label": "Auto Verify",
+      "help": "Automatically verify claims after each agent response"
+    },
+    "enableLLM": {
+      "label": "Enable LLM Extraction",
+      "help": "Use LLM for enhanced claim extraction (requires API key)"
+    },
+    "trustWarningThreshold": {
+      "label": "Warning Threshold",
+      "help": "Trust score below this triggers a warning (0-100)"
+    },
+    "trustBlockThreshold": {
+      "label": "Block Threshold",
+      "help": "Trust score below this blocks the agent (0-100)"
+    },
+    "dbPath": {
+      "label": "Database Path",
+      "help": "Path to SQLite database (default: ~/.openclaw/veridic.db)"
+    },
+    "retryEnabled": {
+      "label": "Auto Retry",
+      "help": "Automatically retry contradicted claims"
+    },
+    "retryMaxRetries": {
+      "label": "Max Retries",
+      "help": "Maximum retry attempts for contradicted claims (default: 2)"
+    }
+  },
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
     "properties": {
-      "enableLLM": {
+      "enabled": {
         "type": "boolean",
-        "default": true,
-        "description": "Enable LLM-based claim extraction when regex confidence is low"
-      },
-      "extractionThreshold": {
-        "type": "number",
-        "default": 0.6,
-        "minimum": 0,
-        "maximum": 1,
-        "description": "Minimum confidence for regex extraction before falling back to LLM"
-      },
-      "verificationThreshold": {
-        "type": "number",
-        "default": 0.7,
-        "minimum": 0,
-        "maximum": 1,
-        "description": "Minimum confidence to mark claim as verified"
-      },
-      "trustWarningThreshold": {
-        "type": "number",
-        "default": 70,
-        "minimum": 0,
-        "maximum": 100,
-        "description": "Trust score below which to show warning"
-      },
-      "trustBlockThreshold": {
-        "type": "number",
-        "default": 30,
-        "minimum": 0,
-        "maximum": 100,
-        "description": "Trust score below which to block actions"
+        "default": true
       },
       "autoVerify": {
         "type": "boolean",
-        "default": true,
-        "description": "Automatically verify claims after each response"
+        "default": true
+      },
+      "enableLLM": {
+        "type": "boolean",
+        "default": false
+      },
+      "trustWarningThreshold": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 100,
+        "default": 70
+      },
+      "trustBlockThreshold": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 100,
+        "default": 30
+      },
+      "dbPath": {
+        "type": "string"
+      },
+      "retry": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "default": true
+          },
+          "maxRetries": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 5,
+            "default": 2
+          },
+          "notifyUser": {
+            "type": "boolean",
+            "default": true
+          }
+        }
       }
     }
   }
