@@ -3,7 +3,6 @@
 > **Verified memory for AI agents** - Detect lies, prevent forgetting
 
 [![Version](https://img.shields.io/badge/version-0.4.0-blue.svg)](https://github.com/tuantabit/claw-memory)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-plugin-orange.svg)](https://openclaw.dev)
 
 Claw-Memory solves two critical problems with AI agents:
@@ -250,6 +249,3 @@ npm run typecheck # Type check
 ./install.sh --local
 ```
 
-## 📄 License
-
-MIT © [OpenClaw Team](https://github.com/tuantabit)
