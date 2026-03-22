@@ -1,6 +1,6 @@
 {
   "name": "claw-memory",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Verified memory for AI agents - detect lies, prevent forgetting",
   "type": "module",
   "main": "dist/index.js",
@@ -22,10 +22,11 @@
     "temporal"
   ],
   "scripts": {
-    "build": "tsc && cp openclaw.plugin.json dist/",
+    "build": "tsc && cp openclaw.plugin.json dist/ && cd dist && ln -sf index.js claw-memory.js",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "install-plugin": "bash install.sh"
   },
   "files": [
     "dist/**/*.js",

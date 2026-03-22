@@ -1,11 +1,87 @@
-# claw-memory
+# 🧠 Claw-Memory
 
-Memory and verification system for AI agents. Solves two critical problems:
+> **Verified memory for AI agents** - Detect lies, prevent forgetting
 
-1. **Forgetting** - Agent loses context of what it did
-2. **Lying** - Agent claims "done" but didn't actually do it
+[![Version](https://img.shields.io/badge/version-0.4.0-blue.svg)](https://github.com/tuantabit/claw-memory)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![OpenClaw](https://img.shields.io/badge/OpenClaw-plugin-orange.svg)](https://openclaw.dev)
 
-## Architecture
+Claw-Memory solves two critical problems with AI agents:
+
+| Problem | What happens | Solution |
+|---------|--------------|----------|
+| **🤥 Lying** | Agent claims "done" but didn't actually do it | Verify claims against real evidence |
+| **😵 Forgetting** | Agent loses context across conversations | Persistent memory with semantic search |
+
+## ⚡ Quick Install
+
+**One command to install:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tuantabit/claw-memory/main/install.sh | bash
+```
+
+**One command to uninstall:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tuantabit/claw-memory/main/uninstall.sh | bash
+```
+
+### Manual Installation
+
+```bash
+# Clone and build
+git clone https://github.com/tuantabit/claw-memory.git
+cd claw-memory
+npm install
+npm run build
+
+# Install to OpenClaw
+npm run install-plugin
+```
+
+### Requirements
+
+- **OpenClaw** (any version)
+- **Node.js** 22.5.0+ (uses built-in `node:sqlite`)
+- **npm** or **yarn**
+
+## 🔧 Configuration
+
+After installation, the plugin is automatically configured in `~/.openclaw/openclaw.json`:
+
+```json
+{
+  "plugins": {
+    "allow": ["claw-memory"],
+    "load": {
+      "paths": ["~/.openclaw/plugins/claw-memory/claw-memory.js"]
+    },
+    "entries": {
+      "claw-memory": {
+        "enabled": true,
+        "config": {
+          "autoVerify": true
+        }
+      }
+    }
+  }
+}
+```
+
+### Plugin Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `enabled` | boolean | `true` | Enable/disable plugin |
+| `autoVerify` | boolean | `true` | Auto-verify after each response |
+| `enableLLM` | boolean | `false` | Use LLM for claim extraction |
+| `trustWarningThreshold` | number | `70` | Trust score warning threshold (0-100) |
+| `trustBlockThreshold` | number | `30` | Trust score block threshold (0-100) |
+| `retry.enabled` | boolean | `true` | Auto-retry contradicted claims |
+| `retry.maxRetries` | number | `2` | Max retry attempts |
+
+## 🏗️ Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -21,52 +97,25 @@ Memory and verification system for AI agents. Solves two critical problems:
 │       ↓                                                     │
 │  4. If contradicted → retry (max 2 times)                   │
 │       ↓                                                     │
-│  5. Warn user: [OK] or [FAIL]                               │
+│  5. Warn user: ✅ VERIFIED or ❌ CONTRADICTED                │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
-│  ANTI-FORGETTING (Memory) - Uses Memory-Core                │
+│  ANTI-FORGETTING (Memory)                                   │
 ├─────────────────────────────────────────────────────────────┤
-│  After verification:                                        │
-│       ↓                                                     │
-│  vectorStore.store(claimId, embedding)    ← Semantic store  │
-│       ↓                                                     │
-│  graphService.addEntity({file: "file.ts"}) ← Entity store   │
-│       ↓                                                     │
-│  timelineService.addEvent(claim, timestamp) ← Timeline      │
+│  Storage:                                                   │
+│    • vectorStore.store()     → Semantic embeddings          │
+│    • graphService.addEntity() → Knowledge graph             │
+│    • timelineService.add()    → Temporal timeline           │
 │                                                             │
-│  When recalling:                                            │
-│       ↓                                                     │
-│  vectorStore.search("authentication")     ← Semantic search │
-│       ↓                                                     │
-│  graphService.findRelated("auth.ts")      ← Find related    │
-│       ↓                                                     │
-│  timelineService.query("yesterday")       ← Time query      │
+│  Recall:                                                    │
+│    • vectorStore.search()     → "Find auth-related claims"  │
+│    • graphService.findPath()  → "How are A and B related?"  │
+│    • timelineService.query()  → "What did I do yesterday?"  │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-## Summary
-
-| Problem | Solution | Memory-Core API |
-|---------|----------|-----------------|
-| **Forgetting** | Store all claims + evidence in DB | `vector.store()`, `graph.addEntity()`, `timeline.addEvent()` |
-| **Lying** | Verify claims against real evidence | `vector.search()` to find similar verified claims |
-
-## How it works
-
-### Verification Pipeline
-
-```
-Agent Response → Extract Claims → Collect Evidence → Verify → Warn User
-```
-
-1. **Extract**: Parse response for claims ("I created file.ts", "Tests passed")
-2. **Collect**: Gather evidence (check file exists, read git status, get command output)
-3. **Verify**: Compare claim vs evidence → `verified` or `contradicted`
-4. **Retry**: If contradicted, retry up to 2 times
-5. **Warn**: Return warnings to user: `[OK]` or `[FAIL]`
-
-### Supported Claim Types
+## 📋 Supported Claim Types
 
 | Claim Type | Example | Evidence Source |
 |------------|---------|-----------------|
@@ -80,60 +129,18 @@ Agent Response → Extract Claims → Collect Evidence → Verify → Warn User
 | `code_fixed` | "I fixed the bug" | file + command check |
 | `task_completed` | "Task done" | action verification |
 
-## Quick Start
+## 🛠️ Agent Tools
 
-### Requirements
+The plugin provides tools that the AI agent can use:
 
-- Node.js **22.5.0+** (uses built-in `node:sqlite`)
+| Tool | Description |
+|------|-------------|
+| `claw-memory_verify` | Verify a specific claim or search claims |
+| `claw-memory_audit` | Get verification history and statistics |
+| `claw-memory_expand` | Expand claim with evidence details |
+| `claw-memory_compact` | Trigger database compaction |
 
-### Install
-
-```bash
-git clone https://github.com/tuantabit/claw-memory.git
-cd claw-memory
-pnpm install
-pnpm build
-```
-
-### Programmatic Usage
-
-```typescript
-import { createDatabase, createClawMemoryEngine } from "claw-memory";
-
-const db = createDatabase("./claw-memory.db");
-const engine = createClawMemoryEngine(db, {
-  autoVerify: true,
-  retry: {
-    enabled: true,
-    maxRetries: 2,
-    notifyUser: true,
-  },
-});
-
-await engine.initialize();
-engine.setSession("session-001");
-
-// Process agent response
-const result = await engine.processResponse("I created src/app.ts");
-
-console.log(result.claims);        // Extracted claims
-console.log(result.verifications); // Verification results
-console.log(result.warnings);      // [OK] or [FAIL] warnings
-
-await engine.close();
-```
-
-### Use as OpenClaw Extension
-
-```json
-{
-  "extensions": ["./path/to/claw-memory/dist/index.js"]
-}
-```
-
-## Memory-Core Integration
-
-Memory-Core provides long-term memory storage. Claw-Memory uses it to remember and recall history.
+## 💾 Memory Features
 
 ### Vector Store (Semantic Search)
 
@@ -143,171 +150,55 @@ const embedding = await embeddingService.embed("Created auth service");
 await vectorStore.store(memoryId, sessionId, embedding, "local");
 
 // Search semantically
-const query = await embeddingService.embed("login authentication");
-const results = await vectorStore.search(query, { limit: 5 });
+const results = await vectorStore.search(queryEmbedding, { limit: 5 });
 // Returns: [{ memoryId, similarity: 0.85 }, ...]
 ```
-
-Features:
-- 128-dimensional hash-based embeddings (no external API)
-- Cosine similarity search
-- Session-scoped queries
 
 ### Knowledge Graph
 
 ```typescript
 // Entity types: file, function, class, component, command, package, test, error
-// Relationship types: CONTAINS, IMPORTS, DEPENDS_ON, CALLS, TESTS, FIXES
+// Relationships: CONTAINS, IMPORTS, DEPENDS_ON, CALLS, TESTS, FIXES
 
-// Add entity
 await graphService.addEntity({ type: "file", name: "src/auth.ts" });
-
-// Find path between entities
 const path = await graphService.findPath(fileId, testId);
-
-// Get neighbors
-const neighbors = await graphService.getNeighbors(entityId, { depth: 2 });
 ```
 
 ### Temporal Memory
 
 ```typescript
-// Supported expressions:
-// - "today", "yesterday"
-// - "last week", "this month"
-// - "3 days ago", "last 5 hours"
-
+// Supported: "today", "yesterday", "last week", "3 days ago"
 const events = await timelineService.queryByTimeExpression(sessionId, "last week");
-
-// Get timeline segments
-const segments = await timelineService.getTimelineSegments(sessionId, "day");
 ```
 
-## Configuration
-
-### Environment Variables
+## ⚙️ Environment Variables
 
 ```bash
-CLAW_MEMORY_ENABLE_LLM=true           # LLM-based extraction
-CLAW_MEMORY_EXTRACTION_THRESHOLD=0.6  # Regex confidence threshold
-CLAW_MEMORY_VERIFICATION_THRESHOLD=0.7
-CLAW_MEMORY_AUTO_VERIFY=true
+CLAW_MEMORY_ENABLED=true              # Enable/disable plugin
+CLAW_MEMORY_AUTO_VERIFY=true          # Auto-verify claims
+CLAW_MEMORY_ENABLE_LLM=false          # Use LLM extraction
 CLAW_MEMORY_RETRY_ENABLED=true        # Auto-retry on contradiction
 CLAW_MEMORY_MAX_RETRIES=2             # Max retry attempts
 ```
 
-### Programmatic Config
+## 📁 Database
 
-```typescript
-createClawMemoryEngine(db, {
-  enableLLM: true,
-  extractionThreshold: 0.6,
-  verificationThreshold: 0.7,
-  autoVerify: true,
-  maxClaimsPerSession: 1000,
-  retry: {
-    enabled: true,
-    maxRetries: 2,
-    notifyUser: true,
-  },
-  compaction: {
-    retentionDays: 30,
-    preserveContradicted: true,
-    autoCompact: false,
-  },
-});
-```
-
-## Agent Tools
-
-| Tool | Description |
-|------|-------------|
-| `claw-memory_verify` | Verify specific claim or search claims |
-| `claw-memory_audit` | Get verification history and statistics |
-| `claw-memory_expand` | Expand claim with evidence details |
-| `claw-memory_compact` | Trigger database compaction |
-
-## Database Schema
-
-### Core Tables
+Data is stored in SQLite at `~/.openclaw/claw-memory.db`:
 
 ```sql
 -- Claims and verification
 claims, evidence, verifications
 
--- Memory (from memory-core)
+-- Memory storage
 memory_vectors, entities, relationships, temporal_events
 
 -- Context management
 messages, summaries, memory_entries
-
--- Receipts (proof of actions)
-actions, file_receipts, command_receipts
 ```
 
-### Archive Tables
+## 🖥️ Terminal UI
 
-```sql
-claims_archive, evidence_archive, daily_summaries, compaction_history
-```
-
-## Project Structure
-
-```
-src/
-├── index.ts              # Entry point
-├── engine.ts             # ClawMemoryEngine (main orchestrator)
-├── plugin.ts             # OpenClaw plugin hooks
-├── schema.ts             # Database schema
-├── config.ts             # Configuration
-├── types.ts              # Type definitions
-│
-├── core/
-│   └── database.ts       # SQLite wrapper (node:sqlite)
-│
-├── memory/               # Vector search (re-exports from memory-core)
-├── graph/                # Knowledge graph (re-exports from memory-core)
-├── temporal/             # Temporal memory (re-exports from memory-core)
-│
-├── extractor/            # Claim extraction
-│   ├── claim-extractor.ts
-│   ├── llm-extractor.ts
-│   └── patterns.ts
-│
-├── collector/            # Evidence collection
-│   ├── evidence-collector.ts
-│   └── sources/
-│       ├── file-source.ts
-│       ├── git-source.ts
-│       ├── command-source.ts
-│       └── receipt-source.ts
-│
-├── verifier/             # Claim verification
-│   ├── claim-verifier.ts
-│   └── strategies/
-│
-├── retry/                # Auto-retry system
-│   ├── retry-manager.ts
-│   └── retry-prompt.ts
-│
-├── store/                # Data persistence
-│   ├── claim-store.ts
-│   ├── evidence-store.ts
-│   ├── verification-store.ts
-│   └── ...
-│
-├── compactor/            # Database compaction
-│
-└── tools/                # Agent tools
-    ├── claw-memory-verify.ts
-    ├── claw-memory-audit.ts
-    ├── claw-memory-expand.ts
-    └── claw-memory-compact.ts
-```
-
-## Terminal UI
-
-Go-based TUI for database inspection:
+Optional Go-based TUI for database inspection:
 
 ```bash
 cd tui
@@ -322,17 +213,43 @@ make build
 | `Enter` | Select |
 | `e` | Evidence |
 | `s` | Search |
-| `x` | Export |
 
-## Development
+## 🔄 Uninstall
+
+**Quick uninstall:**
 
 ```bash
-pnpm install     # Install dependencies
-pnpm build       # Build
-pnpm typecheck   # Type check
-pnpm dev         # Watch mode
+curl -fsSL https://raw.githubusercontent.com/tuantabit/claw-memory/main/uninstall.sh | bash
 ```
 
-## License
+**Options:**
 
-MIT
+```bash
+# Keep database (preserve memory data)
+curl -fsSL .../uninstall.sh | bash -s -- --keep-data
+
+# Skip confirmation
+curl -fsSL .../uninstall.sh | bash -s -- --force
+```
+
+**Manual uninstall:**
+
+1. Remove plugin directory: `rm -rf ~/.openclaw/plugins/claw-memory`
+2. Remove from config: Edit `~/.openclaw/openclaw.json` and remove claw-memory entries
+3. (Optional) Remove database: `rm ~/.openclaw/claw-memory.db`
+
+## 🧑‍💻 Development
+
+```bash
+npm install      # Install dependencies
+npm run build    # Build plugin
+npm run dev      # Watch mode
+npm run typecheck # Type check
+
+# Local install (for testing)
+./install.sh --local
+```
+
+## 📄 License
+
+MIT © [OpenClaw Team](https://github.com/tuantabit)
