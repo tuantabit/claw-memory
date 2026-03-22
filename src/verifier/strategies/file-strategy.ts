@@ -1,7 +1,3 @@
-/**
- * File Verification Strategy
- * Verify file-related claims
- */
 
 import type {
   Claim,
@@ -12,13 +8,10 @@ import type {
 } from "../../types.js";
 
 export class FileVerificationStrategy {
-  /**
-   * Verify a file-related claim
-   */
+  
   verify(input: VerificationInput): VerificationOutput {
     const { claim, evidence } = input;
 
-    // Filter relevant evidence
     const fileEvidence = evidence.filter(
       (e) => e.source === "file_receipt" || e.source === "filesystem" || e.source === "git_diff"
     );
@@ -33,15 +26,12 @@ export class FileVerificationStrategy {
       };
     }
 
-    // Analyze evidence
     const supporting = fileEvidence.filter((e) => e.supports_claim);
     const contradicting = fileEvidence.filter((e) => !e.supports_claim);
 
-    // Calculate weighted confidence
     const supportingWeight = supporting.reduce((sum, e) => sum + e.confidence, 0);
     const contradictingWeight = contradicting.reduce((sum, e) => sum + e.confidence, 0);
 
-    // Determine status
     let status: VerificationStatus;
     let confidence: number;
     let details: string;
@@ -73,9 +63,7 @@ export class FileVerificationStrategy {
     };
   }
 
-  /**
-   * Build details for verified claim
-   */
+  
   private buildVerificationDetails(claim: Claim, evidence: Evidence[]): string {
     const fileEntities = claim.entities.filter((e) => e.type === "file");
     const files = fileEntities.map((e) => e.value).join(", ");
@@ -95,9 +83,7 @@ export class FileVerificationStrategy {
     }
   }
 
-  /**
-   * Build details for contradicted claim
-   */
+  
   private buildContradictionDetails(claim: Claim, evidence: Evidence[]): string {
     const fileEntities = claim.entities.filter((e) => e.type === "file");
     const files = fileEntities.map((e) => e.value).join(", ");
@@ -117,9 +103,7 @@ export class FileVerificationStrategy {
     }
   }
 
-  /**
-   * Check if this strategy handles the claim type
-   */
+  
   handles(claimType: string): boolean {
     return ["file_created", "file_modified", "file_deleted"].includes(claimType);
   }

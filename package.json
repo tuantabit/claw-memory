@@ -1,8 +1,7 @@
 {
-  "name": "@openclaw/veridic-claw",
-  "version": "2026.3.17",
-  "private": true,
-  "description": "Veridic Claw - Verify agent claims. Don't trust. Verify.",
+  "name": "claw-memory",
+  "version": "0.3.0",
+  "description": "Verified memory for AI agents - detect lies, prevent forgetting",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -12,35 +11,52 @@
       "import": "./dist/index.js"
     }
   },
+  "keywords": [
+    "ai-agent",
+    "claim-verification",
+    "trust-score",
+    "llm",
+    "memory",
+    "knowledge-graph",
+    "vector-store",
+    "temporal"
+  ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && cp openclaw.plugin.json dist/",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
-    "clean": "rm -rf dist",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "clean": "rm -rf dist"
   },
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "openclaw.plugin.json",
+    "README.md",
+    "LICENSE"
+  ],
   "dependencies": {
-    "better-sqlite3": "^12.8.0",
+    "memory-core": "github:tuantabit/memory-core",
     "nanoid": "^5.0.9"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.0.0",
-    "typescript": "^5.7.0",
-    "vitest": "^3.2.4"
+    "typescript": "^5.7.0"
   },
   "peerDependencies": {
-    "openclaw": ">=2026.3.11"
-  },
-  "peerDependenciesMeta": {
-    "openclaw": {
-      "optional": true
-    }
+    "openclaw": "*"
   },
   "openclaw": {
     "extensions": [
       "./dist/index.js"
     ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tuantabit/claw-memory.git"
+  },
+  "license": "MIT",
+  "author": "OpenClaw Team",
+  "engines": {
+    "node": ">=22.5.0"
   }
 }

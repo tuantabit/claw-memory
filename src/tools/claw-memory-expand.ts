@@ -1,14 +1,8 @@
-/**
- * veridic_expand Tool
- * Expand verification details (like lcm_expand in lossless-claw)
- */
 
-import type { VeridicEngine } from "../engine.js";
+import type { ClawMemoryEngine } from "../engine.js";
 
 export interface ExpandInput {
-  /** Claim ID to expand */
   claim_id: string;
-  /** Include raw evidence data */
   include_evidence?: boolean;
 }
 
@@ -38,9 +32,9 @@ export interface ExpandOutput {
   summary: string;
 }
 
-export function createExpandTool(engine: VeridicEngine) {
+export function createExpandTool(engine: ClawMemoryEngine) {
   return {
-    name: "veridic_expand",
+    name: "claw-memory_expand",
     description: "Get detailed information about a claim and its verification evidence.",
     parameters: {
       type: "object",
@@ -61,7 +55,6 @@ export function createExpandTool(engine: VeridicEngine) {
       try {
         const stores = engine.getStores();
 
-        // Get claim details
         const claim = await stores.claims.getById(input.claim_id);
         if (!claim) {
           return {
@@ -73,13 +66,10 @@ export function createExpandTool(engine: VeridicEngine) {
           };
         }
 
-        // Get verification
         const verification = await stores.verifications.getByClaimId(input.claim_id);
 
-        // Get evidence
         const evidence = await stores.evidence.getByClaimId(input.claim_id);
 
-        // Build summary
         let summary = `Claim: "${claim.original_text.slice(0, 80)}..."\n`;
         summary += `Type: ${claim.claim_type}\n`;
         summary += `Confidence: ${(claim.confidence * 100).toFixed(0)}%\n`;

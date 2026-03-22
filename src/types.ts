@@ -1,15 +1,11 @@
 /**
- * Veridic-Claw Core Types
- * Following lossless-claw pattern: types.ts defines all interfaces
+ * Core type definitions for Claw Memory
  */
 
-// Re-export VeridicConfig from config for convenience
-export type { VeridicConfig } from "./config.js";
-
-// ==================== Claim Types ====================
+export type { ClawMemoryConfig } from "./config.js";
 
 /**
- * Types of claims an agent can make
+ * Types of claims that can be extracted from agent responses
  */
 export type ClaimType =
   | "file_created"
@@ -28,7 +24,7 @@ export type ClaimType =
   | "unknown";
 
 /**
- * Verification status
+ * Status of a claim verification
  */
 export type VerificationStatus =
   | "verified"
@@ -37,7 +33,7 @@ export type VerificationStatus =
   | "insufficient_evidence";
 
 /**
- * Evidence source types
+ * Sources from which evidence can be collected
  */
 export type EvidenceSource =
   | "file_receipt"
@@ -48,7 +44,7 @@ export type EvidenceSource =
   | "code_content";
 
 /**
- * Entity extracted from claim
+ * Entity referenced in a claim (file, function, command, etc.)
  */
 export interface ClaimEntity {
   type: "file" | "function" | "class" | "component" | "command" | "package" | "test" | "error";
@@ -57,7 +53,7 @@ export interface ClaimEntity {
 }
 
 /**
- * A claim extracted from AI response
+ * A claim extracted from an agent response
  */
 export interface Claim {
   claim_id: string;
@@ -72,7 +68,7 @@ export interface Claim {
 }
 
 /**
- * Evidence supporting or contradicting a claim
+ * Evidence collected to verify a claim
  */
 export interface Evidence {
   evidence_id: string;
@@ -86,7 +82,7 @@ export interface Evidence {
 }
 
 /**
- * Result of claim verification
+ * Result of verifying a claim against evidence
  */
 export interface Verification {
   verification_id: string;
@@ -98,72 +94,9 @@ export interface Verification {
   verified_at: Date;
 }
 
-/**
- * Trust score for a session
- */
-export interface TrustScore {
-  score_id: string;
-  session_id: string;
-  overall_score: number;
-  category_scores: Record<string, number>;
-  total_claims: number;
-  verified_claims: number;
-  contradicted_claims: number;
-  unverified_claims: number;
-  calculated_at: Date;
-}
-
-// ==================== Engine Types ====================
 
 /**
- * Trust context injected into agent
- */
-export interface TrustContext {
-  session_id: string;
-  current_score: number;
-  recent_issues: TrustIssue[];
-  warning_message?: string;
-}
-
-/**
- * A trust issue detected
- */
-export interface TrustIssue {
-  claim_id: string;
-  claim_type: ClaimType;
-  claim_text: string;
-  status: VerificationStatus;
-  severity: "low" | "medium" | "high" | "critical";
-  details: string;
-}
-
-/**
- * Full trust report for a session
- */
-export interface TrustReport {
-  session_id: string;
-  generated_at: Date;
-  summary: {
-    overall_score: number;
-    total_claims: number;
-    verified: number;
-    contradicted: number;
-    unverified: number;
-    accuracy_rate: number;
-  };
-  category_breakdown: Record<ClaimType, {
-    total: number;
-    verified: number;
-    contradicted: number;
-  }>;
-  issues: TrustIssue[];
-  recommendations: string[];
-}
-
-// ==================== Extraction Types ====================
-
-/**
- * Pattern for claim detection
+ * Pattern for extracting claims from text
  */
 export interface ClaimPattern {
   pattern: RegExp;
@@ -182,10 +115,8 @@ export interface ExtractionResult {
   method: "regex" | "llm" | "hybrid";
 }
 
-// ==================== Verification Strategy Types ====================
-
 /**
- * Input for verification strategy
+ * Input for verification process
  */
 export interface VerificationInput {
   claim: Claim;
@@ -193,7 +124,7 @@ export interface VerificationInput {
 }
 
 /**
- * Output from verification strategy
+ * Output from verification process
  */
 export interface VerificationOutput {
   status: VerificationStatus;
@@ -203,10 +134,8 @@ export interface VerificationOutput {
   contradicting_evidence: string[];
 }
 
-// ==================== Dependencies (like LcmDependencies) ====================
-
 /**
- * LLM API interface (from OpenClaw context)
+ * LLM API interface for claim extraction
  */
 export interface LLMApi {
   complete: (params: {
@@ -218,25 +147,18 @@ export interface LLMApi {
 }
 
 /**
- * Dependencies injected from OpenClaw (like LcmDependencies)
+ * Dependencies required by ClawMemoryEngine
  */
-export interface VeridicDependencies {
-  /** LLM API for extraction/verification */
+export interface ClawMemoryDependencies {
   llmApi?: LLMApi;
-  /** Database instance */
   db: import("./core/database.js").Database;
-  /** Get current session ID */
   getSessionId: () => string | null;
-  /** Get current task ID */
   getTaskId: () => string | null;
-  /** Log function */
   log: (level: "debug" | "info" | "warn" | "error", message: string, data?: unknown) => void;
 }
 
-// ==================== Store Types ====================
-
 /**
- * Query options for stores
+ * Options for querying data
  */
 export interface QueryOptions {
   limit?: number;
@@ -246,7 +168,7 @@ export interface QueryOptions {
 }
 
 /**
- * Filter for claims
+ * Filter for querying claims
  */
 export interface ClaimFilter {
   session_id?: string;
@@ -257,7 +179,7 @@ export interface ClaimFilter {
 }
 
 /**
- * Filter for verifications
+ * Filter for querying verifications
  */
 export interface VerificationFilter {
   claim_id?: string;
@@ -265,10 +187,8 @@ export interface VerificationFilter {
   min_confidence?: number;
 }
 
-// ==================== Receipt Types (from ClawMemory) ====================
-
 /**
- * File receipt - tracks file changes
+ * File receipt from ClawMemory (tracks file changes)
  */
 export interface FileReceipt {
   receipt_id: string;
@@ -280,7 +200,7 @@ export interface FileReceipt {
 }
 
 /**
- * Command receipt - tracks command execution
+ * Command receipt from ClawMemory (tracks command execution)
  */
 export interface CommandReceipt {
   receipt_id: string;
@@ -293,7 +213,7 @@ export interface CommandReceipt {
 }
 
 /**
- * Action - tracks tool calls
+ * Action record from ClawMemory (tracks tool calls)
  */
 export interface Action {
   action_id: string;

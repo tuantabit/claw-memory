@@ -1,6 +1,3 @@
-/**
- * Extractor Index
- */
 
 export { ClaimExtractor, createClaimExtractor } from "./claim-extractor.js";
 export { extractClaimsWithLLM, verifyClaimWithLLM } from "./llm-extractor.js";

@@ -1,14 +1,7 @@
-/**
- * LLM-based Claim Extractor
- * Uses LLM for more accurate claim extraction when regex confidence is low
- */
 
 import { nanoid } from "nanoid";
 import type { Claim, ClaimType, ClaimEntity, LLMApi } from "../types.js";
 
-/**
- * System prompt for claim extraction
- */
 const EXTRACTION_PROMPT = `You are a claim extractor. Analyze the AI assistant's response and extract all verifiable claims about actions performed.
 
 Extract claims in these categories:
@@ -42,9 +35,6 @@ Respond with ONLY a JSON array of claims:
 
 If no claims found, respond with: []`;
 
-/**
- * Parse LLM response into claims
- */
 function parseLLMResponse(
   response: string,
   sessionId: string,
@@ -52,7 +42,6 @@ function parseLLMResponse(
   responseId: string | null
 ): Claim[] {
   try {
-    // Extract JSON from response
     const jsonMatch = response.match(/\[[\s\S]*\]/);
     if (!jsonMatch) return [];
 
@@ -116,14 +105,11 @@ function parseLLMResponse(
 
     return claims;
   } catch (error) {
-    console.error("[veridic-claw] Failed to parse LLM response:", error);
+    console.error("[claw-memory] Failed to parse LLM response:", error);
     return [];
   }
 }
 
-/**
- * Extract claims using LLM
- */
 export async function extractClaimsWithLLM(
   text: string,
   sessionId: string,
@@ -133,7 +119,7 @@ export async function extractClaimsWithLLM(
 ): Promise<Claim[]> {
   try {
     const response = await llmApi.complete({
-      model: "claude-3-haiku-20240307", // Use fast model
+      model: "claude-3-haiku-20240307",
       maxTokens: 1000,
       system: EXTRACTION_PROMPT,
       messages: [
@@ -146,14 +132,11 @@ export async function extractClaimsWithLLM(
 
     return parseLLMResponse(response.content, sessionId, taskId, responseId);
   } catch (error) {
-    console.error("[veridic-claw] LLM extraction failed:", error);
+    console.error("[claw-memory] LLM extraction failed:", error);
     return [];
   }
 }
 
-/**
- * Verify a specific claim using LLM
- */
 export async function verifyClaimWithLLM(
   claim: Claim,
   evidence: string,

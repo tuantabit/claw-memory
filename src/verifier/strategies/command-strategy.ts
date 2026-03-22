@@ -1,7 +1,3 @@
-/**
- * Command Verification Strategy
- * Verify command execution claims
- */
 
 import type {
   Claim,
@@ -12,13 +8,10 @@ import type {
 } from "../../types.js";
 
 export class CommandVerificationStrategy {
-  /**
-   * Verify a command-related claim
-   */
+  
   verify(input: VerificationInput): VerificationOutput {
     const { claim, evidence } = input;
 
-    // Filter relevant evidence
     const cmdEvidence = evidence.filter(
       (e) => e.source === "command_receipt" || e.source === "tool_call"
     );
@@ -33,18 +26,14 @@ export class CommandVerificationStrategy {
       };
     }
 
-    // For test claims, check exit codes
     if (claim.claim_type === "test_passed" || claim.claim_type === "test_failed") {
       return this.verifyTestClaim(claim, cmdEvidence);
     }
 
-    // For general command claims
     return this.verifyCommandClaim(claim, cmdEvidence);
   }
 
-  /**
-   * Verify test-related claims
-   */
+  
   private verifyTestClaim(claim: Claim, evidence: Evidence[]): VerificationOutput {
     const supporting: Evidence[] = [];
     const contradicting: Evidence[] = [];
@@ -68,7 +57,6 @@ export class CommandVerificationStrategy {
       }
     }
 
-    // Determine result
     let status: VerificationStatus;
     let confidence: number;
     let details: string;
@@ -108,9 +96,7 @@ export class CommandVerificationStrategy {
     };
   }
 
-  /**
-   * Verify general command claims
-   */
+  
   private verifyCommandClaim(claim: Claim, evidence: Evidence[]): VerificationOutput {
     const commandEntities = claim.entities.filter((e) => e.type === "command");
     const expectedCommands = commandEntities.map((e) => e.value);
@@ -121,7 +107,6 @@ export class CommandVerificationStrategy {
     for (const e of evidence) {
       const data = e.data as { command?: string; exit_code?: number };
 
-      // Check if command matches
       const commandMatches = expectedCommands.some(
         (cmd) => data.command?.includes(cmd) ?? false
       );
@@ -135,7 +120,6 @@ export class CommandVerificationStrategy {
       }
     }
 
-    // Determine result
     let status: VerificationStatus;
     let confidence: number;
     let details: string;
@@ -163,9 +147,7 @@ export class CommandVerificationStrategy {
     };
   }
 
-  /**
-   * Check if this strategy handles the claim type
-   */
+  
   handles(claimType: string): boolean {
     return ["command_executed", "test_passed", "test_failed", "dependency_added"].includes(
       claimType

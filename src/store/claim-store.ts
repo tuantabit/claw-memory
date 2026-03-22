@@ -1,6 +1,14 @@
 /**
- * Claim Store
- * CRUD operations for claims (like ConversationStore in lossless-claw)
+ * Claim Store - Persistence layer for agent claims
+ *
+ * This store handles all database operations for claims:
+ * - Creating new claims from extracted agent responses
+ * - Querying claims by session, task, type, or filter
+ * - Full-text search across claim text
+ * - Statistics and aggregations
+ *
+ * Claims are the foundation of the verification system - they represent
+ * what an agent claims to have done (created files, ran commands, etc.)
  */
 
 import { nanoid } from "nanoid";
@@ -13,11 +21,44 @@ import type {
   QueryOptions,
 } from "../types.js";
 
+/**
+ * Store for managing claims in the database
+ *
+ * @example
+ * ```typescript
+ * const store = new ClaimStore(db);
+ *
+ * // Create a new claim
+ * const claim = await store.create(
+ *   "session-123",
+ *   "file_created",
+ *   "I created src/index.ts",
+ *   [{ type: "file", value: "src/index.ts" }],
+ *   0.9
+ * );
+ *
+ * // Query claims
+ * const sessionClaims = await store.getBySession("session-123");
+ * const unverified = await store.getUnverified("session-123");
+ *
+ * // Search claims
+ * const results = await store.search("session-123", "index.ts");
+ * ```
+ */
 export class ClaimStore {
   constructor(private db: Database) {}
 
   /**
-   * Create a new claim
+   * Create a new claim in the database
+   *
+   * @param sessionId - Session this claim belongs to
+   * @param claimType - Type of claim (file_created, command_executed, etc.)
+   * @param originalText - The original text from agent response
+   * @param entities - Extracted entities (files, commands, etc.)
+   * @param confidence - Extraction confidence score (0.0-1.0)
+   * @param taskId - Optional task ID
+   * @param responseId - Optional response ID for tracking
+   * @returns The created claim with generated ID
    */
   async create(
     sessionId: string,
@@ -55,7 +96,10 @@ export class ClaimStore {
   }
 
   /**
-   * Get claim by ID
+   * Get a claim by its unique ID
+   *
+   * @param claimId - The claim ID to look up
+   * @returns The claim if found, null otherwise
    */
   async getById(claimId: string): Promise<Claim | null> {
     const rows = await this.db.query<Claim>(
@@ -69,7 +113,11 @@ export class ClaimStore {
   }
 
   /**
-   * Get claims by session
+   * Get all claims for a session with pagination
+   *
+   * @param sessionId - Session ID to query
+   * @param options - Pagination and sorting options
+   * @returns Array of claims for the session
    */
   async getBySession(
     sessionId: string,
@@ -92,7 +140,11 @@ export class ClaimStore {
   }
 
   /**
-   * Get claims by task
+   * Get all claims for a specific task
+   *
+   * @param taskId - Task ID to query
+   * @param options - Pagination options
+   * @returns Array of claims for the task
    */
   async getByTask(taskId: string, options?: QueryOptions): Promise<Claim[]> {
     const limit = options?.limit ?? 100;
@@ -110,7 +162,14 @@ export class ClaimStore {
   }
 
   /**
-   * Get claims by filter
+   * Get claims matching a flexible filter
+   *
+   * Supports filtering by session, task, claim type, and minimum confidence.
+   * All filters are ANDed together.
+   *
+   * @param filter - Filter criteria
+   * @param options - Pagination and sorting options
+   * @returns Array of matching claims
    */
   async getByFilter(
     filter: ClaimFilter,
@@ -161,7 +220,14 @@ export class ClaimStore {
   }
 
   /**
-   * Get unverified claims
+   * Get claims that have not been verified yet
+   *
+   * Finds claims that have no corresponding verification record.
+   * Useful for batch verification or showing pending items.
+   *
+   * @param sessionId - Session to query
+   * @param limit - Maximum number of claims to return
+   * @returns Array of unverified claims
    */
   async getUnverified(sessionId: string, limit = 50): Promise<Claim[]> {
     const rows = await this.db.query<Claim>(
@@ -177,7 +243,12 @@ export class ClaimStore {
   }
 
   /**
-   * Get claims by type
+   * Get claims of a specific type within a session
+   *
+   * @param sessionId - Session to query
+   * @param claimType - Type of claims to retrieve
+   * @param limit - Maximum number to return
+   * @returns Array of claims matching the type
    */
   async getByType(
     sessionId: string,
@@ -196,7 +267,10 @@ export class ClaimStore {
   }
 
   /**
-   * Count claims by session
+   * Count total claims in a session
+   *
+   * @param sessionId - Session to count
+   * @returns Total number of claims
    */
   async countBySession(sessionId: string): Promise<number> {
     const rows = await this.db.query<{ count: number }>(
@@ -208,7 +282,12 @@ export class ClaimStore {
   }
 
   /**
-   * Get claim statistics
+   * Get claim statistics for a session
+   *
+   * Returns breakdown by claim type and confidence level.
+   *
+   * @param sessionId - Session to analyze
+   * @returns Statistics object with totals and breakdowns
    */
   async getStats(sessionId: string): Promise<{
     total: number;
@@ -257,12 +336,17 @@ export class ClaimStore {
   }
 
   /**
-   * Search claims by text
+   * Search claims by text using LIKE pattern matching
+   *
+   * @param sessionId - Session to search within
+   * @param query - Text to search for
+   * @param limit - Maximum results to return
+   * @returns Array of matching claims
    */
   async search(sessionId: string, query: string, limit = 20): Promise<Claim[]> {
     const rows = await this.db.query<Claim>(
       `SELECT * FROM claims
-       WHERE session_id = ? AND original_text ILIKE ?
+       WHERE session_id = ? AND original_text LIKE ?
        ORDER BY created_at DESC
        LIMIT ?`,
       [sessionId, `%${query}%`, limit]
@@ -272,14 +356,103 @@ export class ClaimStore {
   }
 
   /**
-   * Delete claim
+   * Full-text search across claims with optional filters
+   *
+   * More flexible than search() - allows cross-session search
+   * and filtering by claim type.
+   *
+   * @param query - Text to search for
+   * @param options - Optional filters and pagination
+   * @returns Array of matching claims
+   */
+  async searchFTS(
+    query: string,
+    options?: {
+      sessionId?: string;
+      claimType?: ClaimType;
+      limit?: number;
+      offset?: number;
+    }
+  ): Promise<Claim[]> {
+    const limit = options?.limit ?? 50;
+    const offset = options?.offset ?? 0;
+
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+
+    if (options?.sessionId) {
+      conditions.push("session_id = ?");
+      params.push(options.sessionId);
+    }
+
+    if (options?.claimType) {
+      conditions.push("claim_type = ?");
+      params.push(options.claimType);
+    }
+
+    conditions.push("original_text LIKE ?");
+    params.push(`%${query}%`);
+
+    const whereClause = conditions.join(" AND ");
+    params.push(limit, offset);
+
+    const rows = await this.db.query<Claim>(
+      `SELECT * FROM claims
+       WHERE ${whereClause}
+       ORDER BY created_at DESC
+       LIMIT ? OFFSET ?`,
+      params
+    );
+
+    return rows.map((r) => this.hydrate(r));
+  }
+
+  /**
+   * Get autocomplete suggestions for search
+   *
+   * Returns claim texts that start with the given prefix,
+   * ordered by frequency.
+   *
+   * @param prefix - Text prefix to match
+   * @param limit - Maximum suggestions to return
+   * @returns Array of suggestions with occurrence counts
+   */
+  async getSearchSuggestions(
+    prefix: string,
+    limit = 10
+  ): Promise<{ text: string; count: number }[]> {
+    const rows = await this.db.query<{ text: string; count: number }>(
+      `SELECT original_text as text, COUNT(*) as count
+       FROM claims
+       WHERE original_text LIKE ?
+       GROUP BY original_text
+       ORDER BY count DESC
+       LIMIT ?`,
+      [`${prefix}%`, limit]
+    );
+
+    return rows;
+  }
+
+  /**
+   * Delete a claim by ID
+   *
+   * Note: This does not cascade to evidence or verifications.
+   * Use with caution.
+   *
+   * @param claimId - ID of claim to delete
    */
   async delete(claimId: string): Promise<void> {
     await this.db.execute(`DELETE FROM claims WHERE claim_id = ?`, [claimId]);
   }
 
   /**
-   * Hydrate claim from database row
+   * Hydrate a database row into a Claim object
+   *
+   * Parses JSON fields and converts timestamps.
+   *
+   * @param row - Raw database row
+   * @returns Properly typed Claim object
    */
   private hydrate(row: Claim): Claim {
     return {

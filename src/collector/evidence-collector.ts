@@ -1,7 +1,16 @@
 /**
- * Evidence Collector
- * Orchestrates evidence collection from multiple sources
- * (like ContextAssembler in lossless-claw)
+ * Evidence Collector - Orchestrates evidence collection from multiple sources
+ *
+ * This module coordinates evidence gathering for claim verification:
+ * 1. Determines which sources are relevant for each claim type
+ * 2. Collects evidence from all relevant sources in parallel
+ * 3. Deduplicates and aggregates results
+ * 4. Provides utility methods for evidence analysis
+ *
+ * Each claim type maps to specific evidence sources:
+ * - file_created/modified/deleted → file, tool, git sources
+ * - command_executed → command, tool sources
+ * - test_passed/failed → command, tool sources
  */
 
 import type { Database } from "../core/database.js";
@@ -10,43 +19,80 @@ import { FileEvidenceSource } from "./sources/file-source.js";
 import { CommandEvidenceSource } from "./sources/command-source.js";
 import { ToolEvidenceSource } from "./sources/tool-source.js";
 import { GitEvidenceSource } from "./sources/git-source.js";
+import { ReceiptSource } from "./sources/receipt-source.js";
 
 /**
- * Evidence collection result
+ * Result of collecting evidence for a claim
  */
 export interface CollectionResult {
+  /** ID of the claim evidence was collected for */
   claim_id: string;
+
+  /** All collected evidence pieces */
   evidence: Evidence[];
+
+  /** Names of sources that were checked */
   sources_checked: string[];
+
+  /** Time taken to collect evidence in milliseconds */
   collection_time_ms: number;
 }
 
+/**
+ * Orchestrates evidence collection from multiple sources
+ *
+ * @example
+ * ```typescript
+ * const collector = new EvidenceCollector(db);
+ *
+ * // Collect evidence for a single claim
+ * const result = await collector.collectForClaim(claim);
+ * console.log(`Found ${result.evidence.length} pieces of evidence`);
+ *
+ * // Check if evidence is sufficient
+ * if (collector.hasSufficientEvidence(result.evidence)) {
+ *   const strongest = collector.getStrongestEvidence(result.evidence);
+ *   console.log(`Strongest evidence: ${strongest.source_ref}`);
+ * }
+ * ```
+ */
 export class EvidenceCollector {
   private fileSource: FileEvidenceSource;
   private commandSource: CommandEvidenceSource;
   private toolSource: ToolEvidenceSource;
   private gitSource: GitEvidenceSource;
+  private receiptSource: ReceiptSource;
 
+  /**
+   * Create a new evidence collector
+   *
+   * @param db - Database for querying receipts and tool calls
+   * @param cwd - Working directory for file/git operations
+   */
   constructor(db: Database, cwd: string = process.cwd()) {
     this.fileSource = new FileEvidenceSource(db);
     this.commandSource = new CommandEvidenceSource(db);
     this.toolSource = new ToolEvidenceSource(db);
     this.gitSource = new GitEvidenceSource(cwd);
+    this.receiptSource = new ReceiptSource(db);
   }
 
   /**
-   * Collect all evidence for a claim
-   * Main entry point (like ContextAssembler.assemble())
+   * Collect evidence for a single claim
+   *
+   * Determines relevant sources based on claim type and
+   * collects evidence from each source in parallel.
+   *
+   * @param claim - The claim to collect evidence for
+   * @returns Collection result with all evidence and metadata
    */
   async collectForClaim(claim: Claim): Promise<CollectionResult> {
     const startTime = Date.now();
     const evidence: Evidence[] = [];
     const sourcesChecked: string[] = [];
 
-    // Determine which sources to check based on claim type
     const sources = this.getSourcesForClaimType(claim.claim_type);
 
-    // Collect from each source in parallel
     const collectionPromises: Promise<Evidence[]>[] = [];
 
     if (sources.includes("file")) {
@@ -69,10 +115,13 @@ export class EvidenceCollector {
       collectionPromises.push(this.gitSource.collectForClaim(claim));
     }
 
-    // Wait for all collections
+    if (sources.includes("receipt")) {
+      sourcesChecked.push("receipt");
+      collectionPromises.push(this.receiptSource.collect(claim));
+    }
+
     const results = await Promise.all(collectionPromises);
 
-    // Flatten and deduplicate evidence
     for (const result of results) {
       evidence.push(...result);
     }
@@ -89,11 +138,16 @@ export class EvidenceCollector {
 
   /**
    * Collect evidence for multiple claims
+   *
+   * Processes claims in batches of 5 to avoid overwhelming
+   * the system while maintaining parallelism.
+   *
+   * @param claims - Array of claims to collect evidence for
+   * @returns Map of claim IDs to collection results
    */
   async collectForClaims(claims: Claim[]): Promise<Map<string, CollectionResult>> {
     const results = new Map<string, CollectionResult>();
 
-    // Collect in parallel with concurrency limit
     const batchSize = 5;
     for (let i = 0; i < claims.length; i += batchSize) {
       const batch = claims.slice(i, i + batchSize);
@@ -110,25 +164,43 @@ export class EvidenceCollector {
   }
 
   /**
-   * Get sources relevant for a claim type
+   * Determine which evidence sources are relevant for a claim type
+   *
+   * Each claim type maps to specific sources that can provide
+   * meaningful evidence. For example, file claims check file/git/tool
+   * sources, while command claims check command/tool sources.
+   *
+   * @param claimType - The type of claim
+   * @returns Array of source names to check
+   */
+  /**
+   * Determine which evidence sources are relevant for a claim type
+   *
+   * Each claim type maps to specific sources that can provide
+   * meaningful evidence. Receipt source is included for all
+   * file and command related claims for verification against
+   * actual action records.
+   *
+   * @param claimType - The type of claim
+   * @returns Array of source names to check
    */
   private getSourcesForClaimType(
     claimType: ClaimType
-  ): Array<"file" | "command" | "tool" | "git"> {
-    const sourceMap: Record<ClaimType, Array<"file" | "command" | "tool" | "git">> = {
-      file_created: ["file", "tool", "git"],
-      file_modified: ["file", "tool", "git"],
-      file_deleted: ["file", "tool", "git"],
-      code_added: ["file", "tool", "git"],
-      code_removed: ["file", "tool", "git"],
-      code_fixed: ["file", "tool", "git"],
-      command_executed: ["command", "tool"],
-      test_passed: ["command", "tool"],
-      test_failed: ["command", "tool"],
-      error_fixed: ["file", "command", "tool"],
-      dependency_added: ["command", "tool", "file"],
-      config_changed: ["file", "tool", "git"],
-      task_completed: ["tool"],
+  ): Array<"file" | "command" | "tool" | "git" | "receipt"> {
+    const sourceMap: Record<ClaimType, Array<"file" | "command" | "tool" | "git" | "receipt">> = {
+      file_created: ["file", "tool", "git", "receipt"],
+      file_modified: ["file", "tool", "git", "receipt"],
+      file_deleted: ["file", "tool", "git", "receipt"],
+      code_added: ["file", "tool", "git", "receipt"],
+      code_removed: ["file", "tool", "git", "receipt"],
+      code_fixed: ["file", "tool", "git", "receipt"],
+      command_executed: ["command", "tool", "receipt"],
+      test_passed: ["command", "tool", "receipt"],
+      test_failed: ["command", "tool", "receipt"],
+      error_fixed: ["file", "command", "tool", "receipt"],
+      dependency_added: ["command", "tool", "file", "receipt"],
+      config_changed: ["file", "tool", "git", "receipt"],
+      task_completed: ["tool", "receipt"],
       unknown: ["tool"],
     };
 
@@ -136,7 +208,14 @@ export class EvidenceCollector {
   }
 
   /**
-   * Deduplicate evidence by source_ref
+   * Remove duplicate evidence, keeping highest confidence per source+ref
+   *
+   * Evidence is considered duplicate if it has the same source
+   * and source_ref. When duplicates exist, keeps the one with
+   * highest confidence.
+   *
+   * @param evidence - Array of evidence to deduplicate
+   * @returns Deduplicated evidence array
    */
   private deduplicateEvidence(evidence: Evidence[]): Evidence[] {
     const seen = new Map<string, Evidence>();
@@ -145,7 +224,6 @@ export class EvidenceCollector {
       const key = `${e.source}:${e.source_ref}`;
       const existing = seen.get(key);
 
-      // Keep evidence with higher confidence
       if (!existing || e.confidence > existing.confidence) {
         seen.set(key, e);
       }
@@ -155,7 +233,13 @@ export class EvidenceCollector {
   }
 
   /**
-   * Get summary of evidence for a claim
+   * Generate a summary of collected evidence
+   *
+   * Provides counts and breakdowns useful for understanding
+   * the overall evidence picture.
+   *
+   * @param evidence - Array of evidence to summarize
+   * @returns Summary with counts by support status and source
    */
   summarizeEvidence(evidence: Evidence[]): {
     total: number;
@@ -187,18 +271,29 @@ export class EvidenceCollector {
   }
 
   /**
-   * Check if there's sufficient evidence for a claim
+   * Check if evidence is sufficient for verification
+   *
+   * Returns true if at least one piece of evidence has
+   * confidence >= 0.7. Used to determine if verification
+   * can proceed.
+   *
+   * @param evidence - Array of evidence to check
+   * @returns true if sufficient evidence exists
    */
   hasSufficientEvidence(evidence: Evidence[]): boolean {
-    // Need at least one piece of evidence
     if (evidence.length === 0) return false;
 
-    // Need at least one high-confidence evidence
     return evidence.some((e) => e.confidence >= 0.7);
   }
 
   /**
-   * Get the strongest evidence (highest confidence supporting)
+   * Get the strongest supporting evidence
+   *
+   * Returns the supporting evidence piece with highest confidence.
+   * Useful for reporting the main reason a claim was verified.
+   *
+   * @param evidence - Array of evidence to search
+   * @returns Strongest supporting evidence or null if none
    */
   getStrongestEvidence(evidence: Evidence[]): Evidence | null {
     const supporting = evidence.filter((e) => e.supports_claim);
@@ -211,6 +306,12 @@ export class EvidenceCollector {
 
   /**
    * Get the strongest contradicting evidence
+   *
+   * Returns the contradicting evidence piece with highest confidence.
+   * Useful for reporting the main reason a claim was contradicted.
+   *
+   * @param evidence - Array of evidence to search
+   * @returns Strongest contradicting evidence or null if none
    */
   getStrongestContradiction(evidence: Evidence[]): Evidence | null {
     const contradicting = evidence.filter((e) => !e.supports_claim);
@@ -223,7 +324,11 @@ export class EvidenceCollector {
 }
 
 /**
- * Create evidence collector
+ * Factory function to create an EvidenceCollector
+ *
+ * @param db - Database instance for source queries
+ * @param cwd - Optional working directory (defaults to process.cwd())
+ * @returns Configured EvidenceCollector instance
  */
 export function createEvidenceCollector(
   db: Database,

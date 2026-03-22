@@ -1,16 +1,9 @@
-/**
- * veridic_verify Tool
- * Verify a specific claim (like lcm_grep in lossless-claw)
- */
 
-import type { VeridicEngine } from "../engine.js";
+import type { ClawMemoryEngine } from "../engine.js";
 
 export interface VerifyInput {
-  /** Claim ID to verify */
   claim_id?: string;
-  /** Search query to find claims */
   query?: string;
-  /** Verify all unverified claims */
   all?: boolean;
 }
 
@@ -28,9 +21,9 @@ export interface VerifyOutput {
   summary: string;
 }
 
-export function createVerifyTool(engine: VeridicEngine) {
+export function createVerifyTool(engine: ClawMemoryEngine) {
   return {
-    name: "veridic_verify",
+    name: "claw-memory_verify",
     description: "Verify agent claims against evidence. Use to check if agent actually did what it claimed.",
     parameters: {
       type: "object",
@@ -54,7 +47,6 @@ export function createVerifyTool(engine: VeridicEngine) {
       const results: VerifyOutput["results"] = [];
 
       try {
-        // Verify specific claim
         if (input.claim_id) {
           const result = await engine.verifyClaim(input.claim_id);
           if (result) {
@@ -69,7 +61,6 @@ export function createVerifyTool(engine: VeridicEngine) {
           }
         }
 
-        // Search and verify
         if (input.query) {
           const searchResults = await engine.searchClaims(input.query);
           for (const { claim } of searchResults) {
@@ -87,11 +78,18 @@ export function createVerifyTool(engine: VeridicEngine) {
           }
         }
 
-        // Verify all unverified
         if (input.all) {
           const stores = engine.getStores();
-          const context = await engine.getTrustContext();
-          const unverified = await stores.claims.getUnverified(context.session_id);
+          const sessionId = engine.getSession();
+          if (!sessionId) {
+            return {
+              success: false,
+              verified_count: 0,
+              results: [],
+              summary: "No session set",
+            };
+          }
+          const unverified = await stores.claims.getUnverified(sessionId);
 
           for (const claim of unverified) {
             const result = await engine.verifyClaim(claim.claim_id);
@@ -108,7 +106,6 @@ export function createVerifyTool(engine: VeridicEngine) {
           }
         }
 
-        // Build summary
         const verified = results.filter((r) => r.status === "verified").length;
         const contradicted = results.filter((r) => r.status === "contradicted").length;
         const unverified = results.filter((r) => r.status === "unverified").length;

@@ -1,6 +1,12 @@
 /**
- * Claim Extractor
- * Extract claims from AI responses (like CompactionEngine in lossless-claw)
+ * Claim Extractor - Extract claims from agent responses
+ *
+ * This module handles the extraction of verifiable claims from agent responses.
+ * It uses a two-stage approach:
+ * 1. Regex-based extraction (fast, pattern matching)
+ * 2. LLM-based extraction (fallback when regex confidence is low)
+ *
+ * Claims are deduplicated and consolidated to avoid duplicate verifications.
  */
 
 import { nanoid } from "nanoid";
@@ -9,22 +15,51 @@ import type {
   ClaimType,
   ClaimEntity,
   ExtractionResult,
-  VeridicConfig,
+  ClawMemoryConfig,
 } from "../types.js";
 import { ALL_PATTERNS, extractEntities } from "./patterns.js";
 import { extractClaimsWithLLM } from "./llm-extractor.js";
 import type { LLMApi } from "../types.js";
 
+/**
+ * Extracts verifiable claims from agent response text
+ *
+ * @example
+ * ```typescript
+ * const extractor = new ClaimExtractor(config);
+ * const result = await extractor.extract(
+ *   "I created src/index.ts and ran npm test",
+ *   "session-123",
+ *   null,
+ *   null
+ * );
+ * // result.claims = [
+ * //   { claim_type: "file_created", original_text: "created src/index.ts", ... },
+ * //   { claim_type: "command_executed", original_text: "ran npm test", ... }
+ * // ]
+ * ```
+ */
 export class ClaimExtractor {
-  private config: VeridicConfig;
+  private config: ClawMemoryConfig;
 
-  constructor(config: VeridicConfig) {
+  constructor(config: ClawMemoryConfig) {
     this.config = config;
   }
 
   /**
-   * Extract claims from AI response text
-   * Main entry point (like CompactionEngine.compact())
+   * Extract claims from text using regex and optionally LLM
+   *
+   * Process:
+   * 1. Run regex patterns to extract claims
+   * 2. If average confidence < threshold AND LLM enabled, use LLM
+   * 3. Merge regex and LLM claims (LLM wins on conflicts if higher confidence)
+   * 4. Consolidate duplicate claims
+   *
+   * @param text - The agent response text
+   * @param sessionId - Current session ID
+   * @param taskId - Current task ID (optional)
+   * @param responseId - Response ID for tracking (optional)
+   * @param llmApi - LLM API for hybrid extraction (optional)
    */
   async extract(
     text: string,
@@ -35,15 +70,15 @@ export class ClaimExtractor {
   ): Promise<ExtractionResult> {
     const startTime = Date.now();
 
-    // Step 1: Try regex extraction first (fast)
+    // Stage 1: Regex extraction
     const regexClaims = this.extractWithRegex(text, sessionId, taskId, responseId);
 
-    // Step 2: If LLM enabled and regex confidence is low, try LLM
     let finalClaims = regexClaims;
     let method: "regex" | "llm" | "hybrid" = "regex";
 
     const avgConfidence = this.calculateAverageConfidence(regexClaims);
 
+    // Stage 2: LLM fallback if confidence is low
     if (
       this.config.enableLLM &&
       llmApi &&
@@ -58,16 +93,14 @@ export class ClaimExtractor {
           llmApi
         );
 
-        // Merge regex and LLM claims, preferring higher confidence
         finalClaims = this.mergeClaims(regexClaims, llmClaims);
         method = "hybrid";
       } catch (error) {
-        console.error("[veridic-claw] LLM extraction failed:", error);
-        // Fall back to regex results
+        console.error("[claw-memory] LLM extraction failed:", error);
       }
     }
 
-    // Step 3: Consolidate similar claims
+    // Consolidate to remove duplicates
     const consolidatedClaims = this.consolidateClaims(finalClaims);
 
     return {
@@ -80,6 +113,9 @@ export class ClaimExtractor {
 
   /**
    * Extract claims using regex patterns
+   *
+   * Iterates through all defined patterns and extracts matching claims.
+   * Each pattern has a type, confidence score, and entity extraction rules.
    */
   extractWithRegex(
     text: string,
@@ -91,19 +127,19 @@ export class ClaimExtractor {
     const seen = new Set<string>();
 
     for (const pattern of ALL_PATTERNS) {
-      // Reset regex lastIndex
+      // Reset regex state for global patterns
       pattern.pattern.lastIndex = 0;
 
       let match: RegExpExecArray | null;
       while ((match = pattern.pattern.exec(text)) !== null) {
         const originalText = match[0].trim();
 
-        // Skip duplicates
+        // Deduplicate by type + text
         const key = `${pattern.type}:${originalText}`;
         if (seen.has(key)) continue;
         seen.add(key);
 
-        // Extract entities
+        // Extract entities (files, commands, etc.) from match groups
         const entities = extractEntities(match, pattern);
 
         claims.push({
@@ -119,7 +155,7 @@ export class ClaimExtractor {
         });
       }
 
-      // Reset for next pattern
+      // Reset for next iteration
       pattern.pattern.lastIndex = 0;
     }
 
@@ -127,14 +163,14 @@ export class ClaimExtractor {
   }
 
   /**
-   * Check if extraction should be performed
-   * (like CompactionEngine.evaluate())
+   * Quick check if text contains any actionable claims
+   *
+   * Used to skip processing for responses that clearly don't contain claims.
+   * Checks for common action verbs like "created", "updated", "ran", etc.
    */
   shouldExtract(text: string): boolean {
-    // Skip very short responses
     if (text.length < 20) return false;
 
-    // Skip if no action words
     const actionIndicators = [
       /\b(?:created?|wrote|added|implemented)\b/i,
       /\b(?:updated?|modified|changed|edited|fixed)\b/i,
@@ -149,18 +185,18 @@ export class ClaimExtractor {
   }
 
   /**
-   * Merge claims from regex and LLM, preferring higher confidence
+   * Merge regex and LLM claims, preferring higher confidence
    */
   private mergeClaims(regexClaims: Claim[], llmClaims: Claim[]): Claim[] {
     const merged = new Map<string, Claim>();
 
-    // Add regex claims
+    // Add regex claims first
     for (const claim of regexClaims) {
       const key = this.getClaimKey(claim);
       merged.set(key, claim);
     }
 
-    // Add or replace with LLM claims if higher confidence
+    // Override with LLM claims if higher confidence
     for (const claim of llmClaims) {
       const key = this.getClaimKey(claim);
       const existing = merged.get(key);
@@ -174,11 +210,9 @@ export class ClaimExtractor {
   }
 
   /**
-   * Consolidate similar claims
-   * (like CompactionEngine.condensedPass())
+   * Consolidate claims by grouping similar claims and keeping highest confidence
    */
   private consolidateClaims(claims: Claim[]): Claim[] {
-    // Group by type and entity
     const groups = new Map<string, Claim[]>();
 
     for (const claim of claims) {
@@ -188,9 +222,9 @@ export class ClaimExtractor {
       groups.set(key, group);
     }
 
-    // Take highest confidence claim from each group
     const consolidated: Claim[] = [];
     for (const group of groups.values()) {
+      // Keep the claim with highest confidence
       const best = group.reduce((a, b) =>
         a.confidence > b.confidence ? a : b
       );
@@ -201,7 +235,7 @@ export class ClaimExtractor {
   }
 
   /**
-   * Get unique key for claim deduplication
+   * Generate a unique key for a claim based on type and entities
    */
   private getClaimKey(claim: Claim): string {
     const entityKey = claim.entities
@@ -213,7 +247,7 @@ export class ClaimExtractor {
   }
 
   /**
-   * Calculate average confidence of claims
+   * Calculate average confidence across claims
    */
   private calculateAverageConfidence(claims: Claim[]): number {
     if (claims.length === 0) return 0;
@@ -222,7 +256,7 @@ export class ClaimExtractor {
   }
 
   /**
-   * Quick check for specific claim type in text
+   * Check if text contains a specific claim type
    */
   hasClaimType(text: string, type: ClaimType): boolean {
     const patterns = ALL_PATTERNS.filter((p) => p.type === type);
@@ -235,7 +269,7 @@ export class ClaimExtractor {
   }
 
   /**
-   * Extract file paths mentioned in text
+   * Extract file paths from text (utility method)
    */
   extractFilePaths(text: string): string[] {
     const filePattern = /[`"']?([^\s`"']+\.\w{1,10})[`"']?/g;
@@ -244,7 +278,6 @@ export class ClaimExtractor {
 
     while ((match = filePattern.exec(text)) !== null) {
       const path = match[1];
-      // Filter out common false positives
       if (
         path &&
         !path.startsWith("http") &&
@@ -259,7 +292,7 @@ export class ClaimExtractor {
   }
 
   /**
-   * Extract command from text
+   * Extract commands from text (utility method)
    */
   extractCommands(text: string): string[] {
     const commands: string[] = [];
@@ -270,7 +303,6 @@ export class ClaimExtractor {
 
     while ((match = backtickPattern.exec(text)) !== null) {
       const cmd = match[1];
-      // Check if it looks like a command
       if (
         cmd &&
         (cmd.startsWith("npm ") ||
@@ -293,8 +325,8 @@ export class ClaimExtractor {
 }
 
 /**
- * Create claim extractor with config
+ * Factory function to create a ClaimExtractor
  */
-export function createClaimExtractor(config: VeridicConfig): ClaimExtractor {
+export function createClaimExtractor(config: ClawMemoryConfig): ClaimExtractor {
   return new ClaimExtractor(config);
 }

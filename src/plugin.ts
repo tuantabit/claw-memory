@@ -1,261 +1,158 @@
 /**
- * Veridic-Claw Plugin
- * OpenClaw plugin integration (like index.ts in lossless-claw)
+ * @module plugin
+ * @description OpenClaw plugin for Claw Memory
+ *
+ * Integrates claim verification into OpenClaw agent framework:
+ * - Extracts claims from agent responses
+ * - Verifies claims against evidence (file receipts, command outputs)
+ * - Auto-retries contradicted claims (max 2 attempts)
+ * - Warns user if retries fail
+ * - Provides semantic search, knowledge graph, and temporal memory
+ *
+ * @example
+ * ```typescript
+ * // In openclaw.json or config
+ * {
+ *   "extensions": ["@openclaw/claw-memory"]
+ * }
+ * ```
  */
 
-import type { Database } from "./core/database.js";
-import type { VeridicConfig, LLMApi } from "./types.js";
-import { VeridicEngine, createVeridicEngine } from "./engine.js";
-import { createVeridicTools } from "./tools/index.js";
-import { resolveConfig } from "./config.js";
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import { createDatabase, getDefaultDbPath } from "./core/database.js";
+import { initClawMemorySchema } from "./schema.js";
+import { ClawMemoryEngine, createClawMemoryEngine } from "./engine.js";
+import { resolveConfig, type ClawMemoryConfig } from "./config.js";
+import { createReceiptCollector } from "./collector/receipt-collector.js";
+import { createRetryManager } from "./retry/index.js";
 
 /**
- * Plugin state
+ * Resolve plugin configuration from environment and user config
  */
-interface PluginState {
-  engine: VeridicEngine;
-  initialized: boolean;
-}
+function resolvePluginConfig(
+  env: NodeJS.ProcessEnv,
+  pluginConfig?: Record<string, unknown>
+): ClawMemoryConfig {
+  const config: Partial<ClawMemoryConfig> = {};
 
-let state: PluginState | null = null;
+  // Environment variables
+  if (env.CLAW_MEMORY_AUTO_VERIFY === "true") config.autoVerify = true;
+  if (env.CLAW_MEMORY_AUTO_VERIFY === "false") config.autoVerify = false;
+  if (env.CLAW_MEMORY_ENABLE_LLM === "true") config.enableLLM = true;
 
-/**
- * Initialize plugin
- */
-async function initializePlugin(
-  db: Database,
-  config?: Partial<VeridicConfig>
-): Promise<PluginState> {
-  if (state?.initialized) {
-    return state;
+  // Plugin config overrides
+  if (pluginConfig) {
+    if (typeof pluginConfig.enabled === "boolean") {
+      config.autoVerify = pluginConfig.enabled;
+    }
+    if (typeof pluginConfig.autoVerify === "boolean") {
+      config.autoVerify = pluginConfig.autoVerify;
+    }
+    if (typeof pluginConfig.enableLLM === "boolean") {
+      config.enableLLM = pluginConfig.enableLLM;
+    }
+    if (pluginConfig.retry && typeof pluginConfig.retry === "object") {
+      config.retry = pluginConfig.retry as ClawMemoryConfig["retry"];
+    }
   }
 
-  const engine = createVeridicEngine(db, config);
-  await engine.initialize();
+  return resolveConfig(config);
+}
 
-  state = {
-    engine,
-    initialized: true,
-  };
+/** Plugin state stored after registration */
+let pluginState: {
+  engine: ClawMemoryEngine;
+  config: ClawMemoryConfig;
+} | null = null;
 
-  return state;
+/**
+ * Get the plugin engine instance
+ * @returns ClawMemoryEngine or null if not initialized
+ */
+export function getPluginEngine(): ClawMemoryEngine | null {
+  return pluginState?.engine ?? null;
 }
 
 /**
- * Extract AI response from context
+ * Claw Memory OpenClaw Plugin
+ *
+ * Provides claim verification for AI agents:
+ * - Detects when agents lie about their actions
+ * - Verifies file creation, modifications, command execution
+ * - Auto-retries failed claims up to 2 times
+ * - Warns user if all retries fail
  */
-function extractAIResponse(context: unknown): string | null {
-  if (!context || typeof context !== "object") {
-    return null;
-  }
+const clawMemoryPlugin = {
+  id: "claw-memory",
+  name: "Claw Memory",
+  description:
+    "Claim verification for AI agents - detect when agents lie about their actions",
 
-  const ctx = context as {
-    response?: { content?: string };
-    assistantMessage?: string;
-    output?: string;
-  };
-
-  return ctx.response?.content ?? ctx.assistantMessage ?? ctx.output ?? null;
-}
-
-/**
- * Extract response ID from context
- */
-function extractResponseId(context: unknown): string | null {
-  if (!context || typeof context !== "object") {
-    return null;
-  }
-
-  const ctx = context as { responseId?: string; response_id?: string };
-  return ctx.responseId ?? ctx.response_id ?? null;
-}
-
-/**
- * Extract session ID from context
- */
-function extractSessionId(context: unknown): string | null {
-  if (!context || typeof context !== "object") {
-    return null;
-  }
-
-  const ctx = context as { sessionId?: string; session_id?: string };
-  return ctx.sessionId ?? ctx.session_id ?? null;
-}
-
-/**
- * Extract task ID from context
- */
-function extractTaskId(context: unknown): string | null {
-  if (!context || typeof context !== "object") {
-    return null;
-  }
-
-  const ctx = context as { taskId?: string; task_id?: string };
-  return ctx.taskId ?? ctx.task_id ?? null;
-}
-
-/**
- * Extract LLM API from context
- */
-function extractLLMApi(context: unknown): LLMApi | undefined {
-  if (!context || typeof context !== "object") {
-    return undefined;
-  }
-
-  const ctx = context as { llmApi?: LLMApi };
-  return ctx.llmApi;
-}
-
-/**
- * Veridic-Claw Plugin Export
- */
-export function createVeridicPlugin(db: Database, config?: Partial<VeridicConfig>) {
-  const resolvedConfig = resolveConfig(config);
-
-  return {
-    id: "veridic-claw",
-    name: "Veridic Claw",
-    description: "Verify agent claims - detect when agents lie about their actions",
-
-    /**
-     * Lifecycle hooks
-     */
-    hooks: {
-      /**
-       * Before agent starts - inject trust context
-       */
-      before_agent_start: async (context: unknown) => {
-        const pluginState = await initializePlugin(db, resolvedConfig);
-        const { engine } = pluginState;
-
-        // Set session context
-        const sessionId = extractSessionId(context);
-        const taskId = extractTaskId(context);
-
-        if (sessionId) {
-          engine.setSession(sessionId, taskId);
-        }
-
-        // Get trust context
-        const trustContext = await engine.getTrustContext();
-
-        // Check if should block
-        if (await engine.shouldBlock()) {
-          return {
-            systemMessage: `[VERIDIC-CLAW] BLOCKED: Trust score (${trustContext.current_score.toFixed(0)}) is below threshold. Agent has made too many false claims.`,
-            blocked: true,
-          };
-        }
-
-        // Inject warning if score is low
-        if (trustContext.warning_message) {
-          return {
-            systemMessage: trustContext.warning_message,
-          };
-        }
-
-        return {};
-      },
-
-      /**
-       * After agent ends - extract and verify claims
-       */
-      agent_end: async (context: unknown) => {
-        if (!state?.initialized) {
-          return;
-        }
-
-        const { engine } = state;
-
-        // Get response
-        const response = extractAIResponse(context);
-        if (!response) {
-          return;
-        }
-
-        // Update session context
-        const sessionId = extractSessionId(context);
-        const taskId = extractTaskId(context);
-
-        if (sessionId) {
-          engine.setSession(sessionId, taskId);
-        }
-
-        // Process response - extract and verify claims
-        const responseId = extractResponseId(context);
-        const llmApi = extractLLMApi(context);
-
-        try {
-          const result = await engine.processResponse(response, responseId, llmApi);
-
-          // Log results
-          if (result.claims.length > 0) {
-            console.log(
-              `[veridic-claw] Processed ${result.claims.length} claims, ` +
-                `${result.verifications.filter((v) => v.verification.status === "verified").length} verified, ` +
-                `${result.verifications.filter((v) => v.verification.status === "contradicted").length} contradicted`
-            );
-          }
-
-          // Check for critical issues
-          const contradicted = result.verifications.filter(
-            (v) => v.verification.status === "contradicted"
-          );
-
-          if (contradicted.length > 0) {
-            console.warn(
-              `[veridic-claw] WARNING: ${contradicted.length} false claims detected!`
-            );
-            for (const c of contradicted) {
-              console.warn(`  - ${c.claim.claim_type}: "${c.claim.original_text.slice(0, 60)}..."`);
-            }
-          }
-        } catch (error) {
-          console.error("[veridic-claw] Error processing response:", error);
-        }
-      },
+  /**
+   * Parse and validate plugin configuration
+   */
+  configSchema: {
+    parse(value: unknown): ClawMemoryConfig {
+      const raw =
+        value && typeof value === "object" && !Array.isArray(value)
+          ? (value as Record<string, unknown>)
+          : {};
+      return resolvePluginConfig(process.env, raw);
     },
+  },
 
-    /**
-     * Register tools
-     */
-    register(api: unknown, context: unknown) {
-      if (!state?.initialized) {
-        return {};
-      }
+  /**
+   * Register plugin with OpenClaw
+   *
+   * Sets up:
+   * - Database connection and schema
+   * - Verification engine with v0.2 features
+   * - Receipt collector for evidence capture
+   * - Retry manager for auto-retry on contradictions
+   */
+  register(api: OpenClawPluginApi) {
+    const pluginConfig =
+      api.pluginConfig && typeof api.pluginConfig === "object"
+        ? (api.pluginConfig as Record<string, unknown>)
+        : undefined;
 
-      const tools = createVeridicTools(state.engine);
+    const config = resolvePluginConfig(process.env, pluginConfig);
 
-      // Convert to OpenClaw tool format
-      const toolMap: Record<string, unknown> = {};
-      for (const tool of tools) {
-        toolMap[tool.name] = {
-          description: tool.description,
-          parameters: tool.parameters,
-          execute: tool.execute,
-        };
-      }
+    // Resolve database path
+    const dbPath =
+      (pluginConfig?.dbPath as string) ||
+      process.env.CLAW_MEMORY_DB_PATH ||
+      getDefaultDbPath();
 
-      return toolMap;
-    },
+    // Initialize database
+    const db = createDatabase(dbPath);
+    initClawMemorySchema(db);
 
-    /**
-     * Get engine instance
-     */
-    getEngine(): VeridicEngine | null {
-      return state?.engine ?? null;
-    },
+    // Create verification engine
+    const engine = createClawMemoryEngine(db, config);
+    engine.initialize().catch((err) => {
+      api.logger.error(`[claw-memory] Failed to initialize engine: ${err}`);
+    });
 
-    /**
-     * Shutdown
-     */
-    async shutdown() {
-      state = null;
-    },
-  };
-}
+    // Create supporting components
+    const receiptCollector = createReceiptCollector(db);
+    const retryManager = createRetryManager(config.retry);
 
-/**
- * Default export for direct use
- */
-export default createVeridicPlugin;
+    // Store state for external access
+    pluginState = { engine, config };
+
+    // Log startup
+    api.logger.info(
+      `[claw-memory] Plugin v0.2 loaded (enabled=${config.autoVerify}, db=${dbPath})`
+    );
+    api.logger.info(
+      `[claw-memory] Features: Auto-retry (max ${config.retry.maxRetries}), ` +
+        `Vector Search, Knowledge Graph, Temporal Memory`
+    );
+  },
+};
+
+export default clawMemoryPlugin;
+
+// Legacy export for backward compatibility
+export { clawMemoryPlugin as createClawMemoryPlugin };

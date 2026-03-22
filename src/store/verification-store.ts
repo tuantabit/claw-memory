@@ -1,17 +1,56 @@
 /**
- * Verification Store
- * CRUD operations for verification results
+ * Verification Store - Persistence layer for claim verification results
+ *
+ * This store manages verification outcomes:
+ * - Creating verification records from the verification engine
+ * - Querying verifications by claim, status, or filter
+ * - Tracking verification history (claims can be re-verified)
+ * - Calculating verification statistics
+ *
+ * Verification statuses:
+ * - verified: Claim is confirmed by evidence
+ * - contradicted: Evidence shows claim is false
+ * - unverified: Not enough evidence to determine
+ * - insufficient_evidence: Cannot verify due to missing sources
  */
 
 import { nanoid } from "nanoid";
 import type { Database } from "../core/database.js";
 import type { Verification, VerificationStatus, VerificationFilter } from "../types.js";
 
+/**
+ * Store for managing verification results
+ *
+ * @example
+ * ```typescript
+ * const store = new VerificationStore(db);
+ *
+ * // Create a verification result
+ * const verification = await store.create(
+ *   claimId,
+ *   "verified",
+ *   [evidenceId1, evidenceId2],
+ *   0.95,
+ *   "File exists with expected hash"
+ * );
+ *
+ * // Query verifications
+ * const result = await store.getByClaimId(claimId);
+ * const contradicted = await store.getContradicted(sessionId);
+ * ```
+ */
 export class VerificationStore {
   constructor(private db: Database) {}
 
   /**
-   * Create new verification
+   * Create a new verification result
+   *
+   * @param claimId - ID of the claim being verified
+   * @param status - Verification outcome
+   * @param evidenceIds - IDs of evidence used for verification
+   * @param confidence - Confidence in the verification (0.0-1.0)
+   * @param details - Human-readable explanation
+   * @returns The created verification record
    */
   async create(
     claimId: string,
@@ -43,7 +82,10 @@ export class VerificationStore {
   }
 
   /**
-   * Get verification by ID
+   * Get a verification by its unique ID
+   *
+   * @param verificationId - The verification ID to look up
+   * @returns The verification if found, null otherwise
    */
   async getById(verificationId: string): Promise<Verification | null> {
     const rows = await this.db.query<Verification>(
@@ -57,7 +99,13 @@ export class VerificationStore {
   }
 
   /**
-   * Get verification for a claim
+   * Get the most recent verification for a claim
+   *
+   * Claims can be verified multiple times. This returns
+   * the latest verification result.
+   *
+   * @param claimId - Claim ID to query
+   * @returns Most recent verification or null if never verified
    */
   async getByClaimId(claimId: string): Promise<Verification | null> {
     const rows = await this.db.query<Verification>(
@@ -74,7 +122,13 @@ export class VerificationStore {
   }
 
   /**
-   * Get all verifications for a claim (history)
+   * Get full verification history for a claim
+   *
+   * Returns all verifications in reverse chronological order.
+   * Useful for seeing how verification status changed over time.
+   *
+   * @param claimId - Claim ID to query
+   * @returns Array of all verifications, newest first
    */
   async getHistoryByClaimId(claimId: string): Promise<Verification[]> {
     const rows = await this.db.query<Verification>(
@@ -88,7 +142,12 @@ export class VerificationStore {
   }
 
   /**
-   * Get verifications by status
+   * Get verifications by status within a session
+   *
+   * @param sessionId - Session to query
+   * @param status - Verification status to filter by
+   * @param limit - Maximum results to return
+   * @returns Array of verifications with the specified status
    */
   async getByStatus(
     sessionId: string,
@@ -108,7 +167,11 @@ export class VerificationStore {
   }
 
   /**
-   * Get verifications by filter
+   * Get verifications matching a flexible filter
+   *
+   * @param filter - Filter criteria (claim_id, status, min_confidence)
+   * @param limit - Maximum results to return
+   * @returns Array of matching verifications
    */
   async getByFilter(filter: VerificationFilter, limit = 100): Promise<Verification[]> {
     const conditions: string[] = [];
@@ -145,14 +208,26 @@ export class VerificationStore {
   }
 
   /**
-   * Get contradicted verifications for session
+   * Get all contradicted verifications in a session
+   *
+   * Shorthand for getByStatus with "contradicted".
+   * These are claims that were proven false.
+   *
+   * @param sessionId - Session to query
+   * @param limit - Maximum results to return
+   * @returns Array of contradicted verifications
    */
   async getContradicted(sessionId: string, limit = 50): Promise<Verification[]> {
     return this.getByStatus(sessionId, "contradicted", limit);
   }
 
   /**
-   * Get verification statistics for session
+   * Get verification statistics for a session
+   *
+   * Returns counts by status and average confidence.
+   *
+   * @param sessionId - Session to analyze
+   * @returns Statistics with totals and breakdowns
    */
   async getStats(sessionId: string): Promise<{
     total: number;
@@ -193,7 +268,10 @@ export class VerificationStore {
   }
 
   /**
-   * Check if claim has been verified
+   * Check if a claim has any verification record
+   *
+   * @param claimId - Claim ID to check
+   * @returns true if claim has been verified, false otherwise
    */
   async isVerified(claimId: string): Promise<boolean> {
     const rows = await this.db.query<{ count: number }>(
@@ -205,7 +283,12 @@ export class VerificationStore {
   }
 
   /**
-   * Update verification
+   * Update a verification record
+   *
+   * Allows partial updates to status, confidence, or details.
+   *
+   * @param verificationId - ID of verification to update
+   * @param updates - Fields to update
    */
   async update(
     verificationId: string,
@@ -240,7 +323,9 @@ export class VerificationStore {
   }
 
   /**
-   * Delete verification
+   * Delete a verification record
+   *
+   * @param verificationId - ID of verification to delete
    */
   async delete(verificationId: string): Promise<void> {
     await this.db.execute(`DELETE FROM verifications WHERE verification_id = ?`, [
@@ -249,7 +334,12 @@ export class VerificationStore {
   }
 
   /**
-   * Hydrate verification from database row
+   * Hydrate a database row into a Verification object
+   *
+   * Parses JSON fields and converts timestamps.
+   *
+   * @param row - Raw database row
+   * @returns Properly typed Verification object
    */
   private hydrate(row: Verification): Verification {
     return {

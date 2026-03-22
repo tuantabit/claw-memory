@@ -1,36 +1,42 @@
 /**
- * Store Index - Export all stores
+ * Store Module - Data persistence layer for ClawMemory
  */
 
 export { ClaimStore } from "./claim-store.js";
 export { EvidenceStore } from "./evidence-store.js";
 export { VerificationStore } from "./verification-store.js";
-export { TrustScoreStore } from "./trust-score-store.js";
+export { MessageStore } from "./message-store.js";
+export { SummaryStore } from "./summary-store.js";
+export { MemoryStore } from "./memory-store.js";
+export { ReceiptStore } from "./receipt-store.js";
 
 import type { Database } from "../core/database.js";
 import { ClaimStore } from "./claim-store.js";
 import { EvidenceStore } from "./evidence-store.js";
 import { VerificationStore } from "./verification-store.js";
-import { TrustScoreStore } from "./trust-score-store.js";
+import { MessageStore } from "./message-store.js";
+import { SummaryStore } from "./summary-store.js";
+import { MemoryStore } from "./memory-store.js";
+import { ReceiptStore } from "./receipt-store.js";
 
-/**
- * All stores bundled together (like lossless-claw's store pattern)
- */
-export interface VeridicStores {
+export interface ClawMemoryStores {
   claims: ClaimStore;
   evidence: EvidenceStore;
   verifications: VerificationStore;
-  trustScores: TrustScoreStore;
+  messages: MessageStore;
+  summaries: SummaryStore;
+  memories: MemoryStore;
+  receipts: ReceiptStore;
 }
 
-/**
- * Create all stores
- */
-export function createStores(db: Database): VeridicStores {
+export function createStores(db: Database): ClawMemoryStores {
   return {
     claims: new ClaimStore(db),
     evidence: new EvidenceStore(db),
     verifications: new VerificationStore(db),
-    trustScores: new TrustScoreStore(db),
+    messages: new MessageStore(db),
+    summaries: new SummaryStore(db),
+    memories: new MemoryStore(db),
+    receipts: new ReceiptStore(db),
   };
 }

@@ -1,15 +1,7 @@
-/**
- * Claim Detection Patterns
- * Regex patterns for extracting claims from AI responses
- */
 
 import type { ClaimType, ClaimPattern, ClaimEntity } from "../types.js";
 
-/**
- * File operation patterns
- */
 export const FILE_PATTERNS: ClaimPattern[] = [
-  // File created
   {
     pattern: /(?:I(?:'ve|'m)?|I have|Let me)\s+(?:created?|wrote|added|made)\s+(?:a\s+)?(?:new\s+)?(?:file\s+)?(?:called\s+|named\s+)?[`"']?([^\s`"']+\.\w+)[`"']?/gi,
     type: "file_created",
@@ -29,7 +21,6 @@ export const FILE_PATTERNS: ClaimPattern[] = [
     entityGroups: [{ index: 1, type: "file" }],
   },
 
-  // File modified
   {
     pattern: /(?:I(?:'ve|'m)?|I have)\s+(?:updated?|modified|changed|edited|fixed)\s+(?:the\s+)?(?:file\s+)?[`"']?([^\s`"']+\.\w+)[`"']?/gi,
     type: "file_modified",
@@ -49,7 +40,6 @@ export const FILE_PATTERNS: ClaimPattern[] = [
     entityGroups: [{ index: 1, type: "file" }],
   },
 
-  // File deleted
   {
     pattern: /(?:I(?:'ve|'m)?|I have)\s+(?:deleted?|removed|cleaned up)\s+(?:the\s+)?(?:file\s+)?[`"']?([^\s`"']+\.\w+)[`"']?/gi,
     type: "file_deleted",
@@ -64,11 +54,7 @@ export const FILE_PATTERNS: ClaimPattern[] = [
   },
 ];
 
-/**
- * Code operation patterns
- */
 export const CODE_PATTERNS: ClaimPattern[] = [
-  // Code added
   {
     pattern: /(?:I(?:'ve|'m)?|I have)\s+(?:added|implemented|created?|wrote)\s+(?:a\s+)?(?:new\s+)?(?:function|method|class|component)\s+(?:called\s+|named\s+)?[`"']?(\w+)[`"']?/gi,
     type: "code_added",
@@ -88,7 +74,6 @@ export const CODE_PATTERNS: ClaimPattern[] = [
     entityGroups: [{ index: 1, type: "function" }],
   },
 
-  // Code removed
   {
     pattern: /(?:I(?:'ve|'m)?|I have)\s+(?:removed|deleted|cleaned up)\s+(?:the\s+)?(?:dead\s+)?(?:code|function|method|class)\s*[`"']?(\w+)?[`"']?/gi,
     type: "code_removed",
@@ -102,7 +87,6 @@ export const CODE_PATTERNS: ClaimPattern[] = [
     entityGroups: [{ index: 1, type: "function" }],
   },
 
-  // Code fixed
   {
     pattern: /(?:I(?:'ve|'m)?|I have)\s+(?:fixed|resolved|corrected|patched)\s+(?:the\s+)?(?:bug|error|issue|problem)\s+(?:in\s+)?[`"']?([^\s`"']+)?[`"']?/gi,
     type: "code_fixed",
@@ -117,11 +101,7 @@ export const CODE_PATTERNS: ClaimPattern[] = [
   },
 ];
 
-/**
- * Command execution patterns
- */
 export const COMMAND_PATTERNS: ClaimPattern[] = [
-  // Command executed
   {
     pattern: /(?:I(?:'ve|'m)?|I have)\s+(?:ran?|executed?|running)\s+[`"']?(.+?)[`"']?(?:\s+and|\s+which|\s*$)/gi,
     type: "command_executed",
@@ -142,11 +122,7 @@ export const COMMAND_PATTERNS: ClaimPattern[] = [
   },
 ];
 
-/**
- * Test result patterns
- */
 export const TEST_PATTERNS: ClaimPattern[] = [
-  // Tests passed
   {
     pattern: /(?:all\s+)?tests?\s+(?:are\s+)?pass(?:ed|ing)?/gi,
     type: "test_passed",
@@ -168,7 +144,6 @@ export const TEST_PATTERNS: ClaimPattern[] = [
     confidence: 0.95,
   },
 
-  // Tests failed
   {
     pattern: /tests?\s+(?:are\s+)?fail(?:ed|ing)?/gi,
     type: "test_failed",
@@ -186,9 +161,6 @@ export const TEST_PATTERNS: ClaimPattern[] = [
   },
 ];
 
-/**
- * Dependency patterns
- */
 export const DEPENDENCY_PATTERNS: ClaimPattern[] = [
   {
     pattern: /(?:I(?:'ve|'m)?|I have)\s+(?:installed?|added)\s+(?:the\s+)?(?:package|dependency|module)\s+[`"']?([^\s`"']+)[`"']?/gi,
@@ -216,9 +188,6 @@ export const DEPENDENCY_PATTERNS: ClaimPattern[] = [
   },
 ];
 
-/**
- * Task completion patterns
- */
 export const COMPLETION_PATTERNS: ClaimPattern[] = [
   {
     pattern: /(?:I(?:'ve|'m)?|I have)\s+(?:completed?|finished?|done)\s+(?:the\s+)?(?:task|work|implementation)/gi,
@@ -242,9 +211,6 @@ export const COMPLETION_PATTERNS: ClaimPattern[] = [
   },
 ];
 
-/**
- * All patterns combined
- */
 export const ALL_PATTERNS: ClaimPattern[] = [
   ...FILE_PATTERNS,
   ...CODE_PATTERNS,
@@ -254,16 +220,10 @@ export const ALL_PATTERNS: ClaimPattern[] = [
   ...COMPLETION_PATTERNS,
 ];
 
-/**
- * Get patterns by claim type
- */
 export function getPatternsByType(type: ClaimType): ClaimPattern[] {
   return ALL_PATTERNS.filter((p) => p.type === type);
 }
 
-/**
- * Extract entities from match
- */
 export function extractEntities(
   match: RegExpMatchArray,
   pattern: ClaimPattern
@@ -286,18 +246,12 @@ export function extractEntities(
   return entities;
 }
 
-/**
- * Normalize entity value
- */
 function normalizeEntity(value: string, type: ClaimEntity["type"]): string {
-  // Remove backticks and quotes
   let normalized = value.replace(/[`"']/g, "").trim();
 
   if (type === "file") {
-    // Normalize file paths
     normalized = normalized.replace(/^\.\//, "");
   } else if (type === "command") {
-    // Extract just the command name
     normalized = normalized.split(/\s+/)[0] ?? normalized;
   }
 

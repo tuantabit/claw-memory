@@ -3,3 +3,18 @@ dist/
 *.tsbuildinfo
 .DS_Store
 .worktrees
+
+# Go build artifacts
+tui/claw-memory-tui
+tui/claw-memory-tui-*
+*.exe
+
+# Markdown files (except root README.md)
+*.md
+!README.md
+tui/*.md
+
+# Test files
+*.test.ts
+*.spec.ts
+vitest.config.ts

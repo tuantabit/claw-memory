@@ -1,35 +1,59 @@
 /**
- * Veridic Engine
- * Main orchestrator for veridic-claw (like LcmContextEngine in lossless-claw)
+ * ClawMemoryEngine - Main verification engine for Claw Memory
  *
- * Coordinates:
- * - Claim extraction from AI responses
- * - Evidence collection
- * - Claim verification
- * - Trust score calculation
+ * Pipeline:
+ * 1. Extract claims from agent responses
+ * 2. Collect evidence from multiple sources
+ * 3. Verify claims against evidence (retry max 2 times)
+ * 4. Warn user on success/failure
  */
 
 import type { Database } from "./core/database.js";
 import type {
   Claim,
-  TrustScore,
-  TrustContext,
-  TrustReport,
-  TrustIssue,
-  VeridicConfig,
-  VeridicDependencies,
+  ClawMemoryConfig,
+  ClawMemoryDependencies,
   ClaimType,
   LLMApi,
 } from "./types.js";
 import { resolveConfig, getConfigFromEnv } from "./config.js";
-import { initVeridicSchema } from "./schema.js";
-import { createStores, VeridicStores } from "./store/index.js";
+import { initClawMemorySchema } from "./schema.js";
+import { createStores, ClawMemoryStores } from "./store/index.js";
 import { createClaimExtractor, ClaimExtractor } from "./extractor/index.js";
 import { createEvidenceCollector, EvidenceCollector } from "./collector/index.js";
 import { createClaimVerifier, ClaimVerifier, FullVerificationResult } from "./verifier/index.js";
 
+// v0.2 imports
+import {
+  LocalEmbeddingService,
+  VectorStore,
+  createEmbeddingService,
+  createVectorStore,
+  type EmbeddingService,
+  type SimilarityResult,
+} from "./memory/index.js";
+import {
+  GraphService,
+  createGraphService,
+  type Entity,
+  type Relationship,
+  type EntityWithRelationships,
+  type GraphPath,
+  type GraphStats,
+} from "./graph/index.js";
+import {
+  TemporalStore,
+  TimelineService,
+  createTemporalStore,
+  createTimelineService,
+  type TemporalEvent,
+  type TemporalStats,
+  type TimelineSegment,
+  type ParsedTimeRange,
+} from "./temporal/index.js";
+
 /**
- * Trust engine state
+ * Internal state of the engine
  */
 interface EngineState {
   initialized: boolean;
@@ -37,17 +61,39 @@ interface EngineState {
   currentTaskId: string | null;
 }
 
-export class VeridicEngine {
+/**
+ * Main verification engine class
+ *
+ * @example
+ * ```typescript
+ * const db = createDatabase(":memory:");
+ * const engine = new ClawMemoryEngine(db);
+ * await engine.initialize();
+ *
+ * engine.setSession("session-123");
+ * const result = await engine.processResponse("I created file.ts");
+ * console.log(result.claims);
+ * console.log(result.warnings);
+ * ```
+ */
+export class ClawMemoryEngine {
   private db: Database;
-  private config: VeridicConfig;
-  private stores: VeridicStores;
+  private config: ClawMemoryConfig;
+  private stores: ClawMemoryStores;
   private extractor: ClaimExtractor;
   private collector: EvidenceCollector;
   private verifier: ClaimVerifier;
   private state: EngineState;
-  private deps: VeridicDependencies | null = null;
+  private deps: ClawMemoryDependencies | null = null;
 
-  constructor(db: Database, config?: Partial<VeridicConfig>) {
+  // v0.2 additions: Vector Search, Knowledge Graph, Temporal Memory
+  private embeddingService: EmbeddingService;
+  private vectorStore: VectorStore;
+  private graphService: GraphService;
+  private temporalStore: TemporalStore;
+  private timelineService: TimelineService;
+
+  constructor(db: Database, config?: Partial<ClawMemoryConfig>) {
     this.db = db;
     this.config = resolveConfig({ ...getConfigFromEnv(), ...config });
     this.stores = createStores(db);
@@ -59,27 +105,35 @@ export class VeridicEngine {
       currentSessionId: null,
       currentTaskId: null,
     };
+
+    // v0.2: Initialize Vector Search, Knowledge Graph, Temporal Memory
+    this.embeddingService = createEmbeddingService();
+    this.vectorStore = createVectorStore(db);
+    this.graphService = createGraphService(db);
+    this.temporalStore = createTemporalStore(db);
+    this.timelineService = createTimelineService(db);
   }
 
   /**
-   * Initialize the engine
+   * Initialize the engine and database schema
+   * Must be called before processing responses
    */
-  async initialize(deps?: VeridicDependencies): Promise<void> {
+  async initialize(deps?: ClawMemoryDependencies): Promise<void> {
     if (this.state.initialized) return;
 
-    // Initialize schema
-    await initVeridicSchema(this.db);
+    await initClawMemorySchema(this.db);
 
     if (deps) {
       this.deps = deps;
     }
 
     this.state.initialized = true;
-    this.log("info", "VeridicEngine initialized");
+    this.log("info", "ClawMemoryEngine initialized");
   }
 
   /**
-   * Set current session context
+   * Set the current session and task context
+   * All subsequent operations will use this context
    */
   setSession(sessionId: string, taskId?: string | null): void {
     this.state.currentSessionId = sessionId;
@@ -87,8 +141,16 @@ export class VeridicEngine {
   }
 
   /**
-   * Process an AI response - extract and verify claims
-   * Main entry point (like LcmContextEngine.ingestMessage())
+   * Get the current session ID
+   * @returns Current session ID or null if not set
+   */
+  getSession(): string | null {
+    return this.state.currentSessionId;
+  }
+
+  /**
+   * Process an agent response to extract and verify claims
+   * Retry max 2 times on contradiction, warn user on result
    */
   async processResponse(
     response: string,
@@ -97,21 +159,19 @@ export class VeridicEngine {
   ): Promise<{
     claims: Claim[];
     verifications: FullVerificationResult[];
-    trustScore: TrustScore | null;
+    warnings: string[];
   }> {
     const sessionId = this.state.currentSessionId;
     if (!sessionId) {
       this.log("warn", "No session set, skipping response processing");
-      return { claims: [], verifications: [], trustScore: null };
+      return { claims: [], verifications: [], warnings: [] };
     }
 
-    // Step 1: Check if extraction is needed
     if (!this.extractor.shouldExtract(response)) {
       this.log("debug", "Response does not contain actionable claims");
-      return { claims: [], verifications: [], trustScore: null };
+      return { claims: [], verifications: [], warnings: [] };
     }
 
-    // Step 2: Extract claims
     const extractionResult = await this.extractor.extract(
       response,
       sessionId,
@@ -122,7 +182,6 @@ export class VeridicEngine {
 
     this.log("info", `Extracted ${extractionResult.claims.length} claims`);
 
-    // Step 3: Store claims
     const storedClaims: Claim[] = [];
     for (const claim of extractionResult.claims) {
       const stored = await this.stores.claims.create(
@@ -137,146 +196,35 @@ export class VeridicEngine {
       storedClaims.push(stored);
     }
 
-    // Step 4: Verify claims if auto-verify is enabled
     let verifications: FullVerificationResult[] = [];
+    const warnings: string[] = [];
+
     if (this.config.autoVerify && storedClaims.length > 0) {
       verifications = await this.verifier.verifyAll(storedClaims);
+
+      for (const v of verifications) {
+        if (v.verification.status === "verified") {
+          warnings.push(`[OK] Verified: ${v.claim.original_text}`);
+        } else if (v.verification.status === "contradicted") {
+          warnings.push(`[FAIL] Contradicted: ${v.claim.original_text} - ${v.verification.details}`);
+        }
+      }
+
       this.log("info", `Verified ${verifications.length} claims`);
     }
 
-    // Step 5: Update trust score
-    let trustScore: TrustScore | null = null;
-    if (storedClaims.length > 0) {
-      trustScore = await this.calculateAndStoreTrustScore(sessionId);
-    }
-
-    return {
-      claims: storedClaims,
-      verifications,
-      trustScore,
-    };
+    return { claims: storedClaims, verifications, warnings };
   }
 
   /**
-   * Get trust context for injection into agent
-   * (like LcmContextEngine.assembleContext())
-   */
-  async getTrustContext(sessionId?: string): Promise<TrustContext> {
-    const sid = sessionId ?? this.state.currentSessionId;
-    if (!sid) {
-      return {
-        session_id: "",
-        current_score: 100,
-        recent_issues: [],
-      };
-    }
-
-    // Get latest trust score
-    const latestScore = await this.stores.trustScores.getLatest(sid);
-    const score = latestScore?.overall_score ?? 100;
-
-    // Get recent issues (contradictions)
-    const contradictions = await this.verifier.getContradictions(sid);
-    const recentIssues: TrustIssue[] = contradictions.slice(0, 5).map((c) => ({
-      claim_id: c.claim.claim_id,
-      claim_type: c.claim.claim_type,
-      claim_text: c.claim.original_text,
-      status: c.verification.status,
-      severity: this.getSeverity(c.claim.claim_type),
-      details: c.verification.details,
-    }));
-
-    // Generate warning if score is low
-    let warningMessage: string | undefined;
-    if (score < this.config.trustWarningThreshold) {
-      warningMessage = this.generateWarningMessage(score, recentIssues);
-    }
-
-    return {
-      session_id: sid,
-      current_score: score,
-      recent_issues: recentIssues,
-      warning_message: warningMessage,
-    };
-  }
-
-  /**
-   * Generate full trust report for a session
-   */
-  async generateReport(sessionId?: string): Promise<TrustReport> {
-    const sid = sessionId ?? this.state.currentSessionId;
-    if (!sid) {
-      throw new Error("No session specified");
-    }
-
-    // Get all stats
-    const stats = await this.verifier.getStats(sid);
-    const latestScore = await this.stores.trustScores.getLatest(sid);
-    const contradictions = await this.verifier.getContradictions(sid);
-
-    // Get claims by type
-    const claimStats = await this.stores.claims.getStats(sid);
-
-    // Build category breakdown
-    const categoryBreakdown: Record<ClaimType, { total: number; verified: number; contradicted: number }> = {} as Record<ClaimType, { total: number; verified: number; contradicted: number }>;
-
-    for (const [type, count] of Object.entries(claimStats.by_type)) {
-      const typeClaims = await this.stores.claims.getByType(sid, type as ClaimType);
-      let verified = 0;
-      let contradicted = 0;
-
-      for (const claim of typeClaims) {
-        const verification = await this.stores.verifications.getByClaimId(claim.claim_id);
-        if (verification?.status === "verified") verified++;
-        else if (verification?.status === "contradicted") contradicted++;
-      }
-
-      categoryBreakdown[type as ClaimType] = {
-        total: count,
-        verified,
-        contradicted,
-      };
-    }
-
-    // Build issues list
-    const issues: TrustIssue[] = contradictions.map((c) => ({
-      claim_id: c.claim.claim_id,
-      claim_type: c.claim.claim_type,
-      claim_text: c.claim.original_text,
-      status: c.verification.status,
-      severity: this.getSeverity(c.claim.claim_type),
-      details: c.verification.details,
-    }));
-
-    // Generate recommendations
-    const recommendations = this.generateRecommendations(stats, issues);
-
-    return {
-      session_id: sid,
-      generated_at: new Date(),
-      summary: {
-        overall_score: latestScore?.overall_score ?? 100,
-        total_claims: stats.total_claims,
-        verified: stats.verified,
-        contradicted: stats.contradicted,
-        unverified: stats.unverified,
-        accuracy_rate: stats.accuracy_rate,
-      },
-      category_breakdown: categoryBreakdown,
-      issues,
-      recommendations,
-    };
-  }
-
-  /**
-   * Verify a specific claim
+   * Manually verify or re-verify a specific claim
    */
   async verifyClaim(claimId: string): Promise<FullVerificationResult | null> {
     return this.verifier.reverify(claimId);
   }
 
   /**
-   * Search claims
+   * Search claims by query string
    */
   async searchClaims(query: string, sessionId?: string) {
     const sid = sessionId ?? this.state.currentSessionId;
@@ -286,187 +234,403 @@ export class VeridicEngine {
   }
 
   /**
-   * Get current trust score
-   */
-  async getCurrentScore(sessionId?: string): Promise<number> {
-    const sid = sessionId ?? this.state.currentSessionId;
-    if (!sid) return 100;
-
-    const latest = await this.stores.trustScores.getLatest(sid);
-    return latest?.overall_score ?? 100;
-  }
-
-  /**
-   * Check if actions should be blocked due to low trust
-   */
-  async shouldBlock(sessionId?: string): Promise<boolean> {
-    const score = await this.getCurrentScore(sessionId);
-    return score < this.config.trustBlockThreshold;
-  }
-
-  /**
-   * Calculate and store trust score
-   */
-  private async calculateAndStoreTrustScore(sessionId: string): Promise<TrustScore> {
-    const stats = await this.verifier.getStats(sessionId);
-
-    // Calculate overall score (0-100)
-    let overallScore = 100;
-
-    if (stats.total_claims > 0) {
-      // Penalize contradictions heavily
-      const contradictionPenalty = (stats.contradicted / stats.total_claims) * 50;
-
-      // Penalize unverified claims
-      const unverifiedPenalty = (stats.unverified / stats.total_claims) * 20;
-
-      // Reward verified claims
-      const verifiedBonus = (stats.verified / stats.total_claims) * 10;
-
-      overallScore = Math.max(0, Math.min(100, 100 - contradictionPenalty - unverifiedPenalty + verifiedBonus));
-    }
-
-    // Calculate category scores
-    const categoryScores: Record<string, number> = {};
-    const claimStats = await this.stores.claims.getStats(sessionId);
-
-    for (const [type, count] of Object.entries(claimStats.by_type)) {
-      if (count > 0) {
-        const weight = this.config.severityWeights[type as keyof typeof this.config.severityWeights] ?? 1;
-        categoryScores[type] = overallScore * weight;
-      }
-    }
-
-    // Store trust score
-    const trustScore = await this.stores.trustScores.create(
-      sessionId,
-      overallScore,
-      categoryScores,
-      stats.total_claims,
-      stats.verified,
-      stats.contradicted,
-      stats.unverified
-    );
-
-    this.log("info", `Trust score calculated: ${overallScore.toFixed(1)}`);
-
-    return trustScore;
-  }
-
-  /**
-   * Get severity for a claim type
-   */
-  private getSeverity(claimType: ClaimType): "low" | "medium" | "high" | "critical" {
-    const severityMap: Record<ClaimType, "low" | "medium" | "high" | "critical"> = {
-      file_created: "high",
-      file_modified: "high",
-      file_deleted: "critical",
-      code_added: "medium",
-      code_removed: "medium",
-      code_fixed: "high",
-      command_executed: "low",
-      test_passed: "critical",
-      test_failed: "medium",
-      error_fixed: "high",
-      dependency_added: "medium",
-      config_changed: "medium",
-      task_completed: "high",
-      unknown: "low",
-    };
-
-    return severityMap[claimType] ?? "low";
-  }
-
-  /**
-   * Generate warning message
-   */
-  private generateWarningMessage(score: number, issues: TrustIssue[]): string {
-    const criticalIssues = issues.filter((i) => i.severity === "critical").length;
-    const highIssues = issues.filter((i) => i.severity === "high").length;
-
-    let message = `[TRUST WARNING] Score: ${score.toFixed(0)}/100.`;
-
-    if (criticalIssues > 0) {
-      message += ` ${criticalIssues} critical false claims detected.`;
-    }
-    if (highIssues > 0) {
-      message += ` ${highIssues} high-severity issues.`;
-    }
-
-    message += " Verify agent actions carefully.";
-
-    return message;
-  }
-
-  /**
-   * Generate recommendations based on issues
-   */
-  private generateRecommendations(
-    stats: { accuracy_rate: number; contradicted: number },
-    issues: TrustIssue[]
-  ): string[] {
-    const recommendations: string[] = [];
-
-    if (stats.contradicted > 0) {
-      recommendations.push("Review contradicted claims and verify actual state of files/commands");
-    }
-
-    if (stats.accuracy_rate < 0.8) {
-      recommendations.push("Consider enabling more detailed verification for future sessions");
-    }
-
-    const testIssues = issues.filter((i) => i.claim_type === "test_passed");
-    if (testIssues.length > 0) {
-      recommendations.push("CRITICAL: Agent falsely claimed tests passed. Run tests manually to verify.");
-    }
-
-    const fileIssues = issues.filter(
-      (i) => i.claim_type === "file_created" || i.claim_type === "file_modified"
-    );
-    if (fileIssues.length > 0) {
-      recommendations.push("Check file system for claimed file operations.");
-    }
-
-    if (recommendations.length === 0) {
-      recommendations.push("No significant issues detected. Continue monitoring.");
-    }
-
-    return recommendations;
-  }
-
-  /**
-   * Log helper
+   * Internal logging helper
    */
   private log(level: "debug" | "info" | "warn" | "error", message: string, data?: unknown): void {
     if (this.deps?.log) {
-      this.deps.log(level, `[veridic-claw] ${message}`, data);
+      this.deps.log(level, `[claw-memory] ${message}`, data);
     } else {
       const fn = level === "error" ? console.error : level === "warn" ? console.warn : console.log;
-      fn(`[veridic-claw] ${message}`, data ?? "");
+      fn(`[claw-memory] ${message}`, data ?? "");
     }
   }
 
   /**
-   * Get stores for direct access
+   * Get access to internal stores for advanced usage
    */
-  getStores(): VeridicStores {
+  getStores(): ClawMemoryStores {
     return this.stores;
   }
 
   /**
-   * Get config
+   * Get direct access to the database instance
+   * Used by compaction and other advanced operations
    */
-  getConfig(): VeridicConfig {
+  getDatabase(): Database {
+    return this.db;
+  }
+
+  /**
+   * Get current configuration
+   */
+  getConfig(): ClawMemoryConfig {
     return this.config;
+  }
+
+  /**
+   * Close the engine and release resources
+   */
+  async close(): Promise<void> {
+    this.state.initialized = false;
+    this.state.currentSessionId = null;
+    this.state.currentTaskId = null;
+    await this.db.close();
+  }
+
+  // ============================================
+  // v0.2 Methods: Vector Search, Knowledge Graph, Temporal Memory
+  // ============================================
+
+  /**
+   * Search memory semantically using embeddings
+   * Finds similar memories even without exact keyword match
+   *
+   * @param query - Search query text
+   * @param sessionId - Optional session ID (uses current if not provided)
+   * @param limit - Maximum results to return
+   * @returns Similar memory entries with similarity scores
+   */
+  async searchSemantic(
+    query: string,
+    sessionId?: string,
+    limit = 10
+  ): Promise<SimilarityResult[]> {
+    const sid = sessionId ?? this.state.currentSessionId;
+    if (!sid) return [];
+
+    const queryEmbedding = await this.embeddingService.embed(query);
+    return this.vectorStore.search(queryEmbedding, { sessionId: sid, limit });
+  }
+
+  /**
+   * Store an embedding for a memory entry
+   *
+   * @param memoryId - ID of the memory entry
+   * @param sessionId - Session ID
+   * @param text - Text to embed
+   * @returns Vector ID
+   */
+  async storeEmbedding(
+    memoryId: string,
+    sessionId: string,
+    text: string
+  ): Promise<string> {
+    const embedding = await this.embeddingService.embed(text);
+    return this.vectorStore.store(memoryId, sessionId, embedding, "local");
+  }
+
+  /**
+   * Process a claim to build knowledge graph
+   * Extracts entities and relationships from the claim
+   *
+   * @param claim - The claim to process
+   * @returns Extracted entities and relationships
+   */
+  async processClaimForGraph(
+    claim: Claim
+  ): Promise<{ entities: Entity[]; relationships: Relationship[] }> {
+    const entities: Entity[] = [];
+    const relationships: Relationship[] = [];
+
+    // Extract entities from claim's entity list
+    if (claim.entities && Array.isArray(claim.entities)) {
+      const entityStore = this.graphService.getEntityStore();
+      const relationshipStore = this.graphService.getRelationshipStore();
+
+      for (const entityData of claim.entities) {
+        // Determine entity type from claim type
+        const entityType = this.getEntityTypeFromClaim(claim.claim_type, entityData);
+        const entityName = typeof entityData === "string" ? entityData : String(entityData);
+
+        // Check if entity already exists
+        let entity = await this.graphService.findEntity(
+          claim.session_id,
+          entityType,
+          entityName
+        );
+
+        if (!entity) {
+          // Create new entity
+          entity = await entityStore.create({
+            sessionId: claim.session_id,
+            type: entityType,
+            name: entityName,
+            metadata: {
+              claimId: claim.claim_id,
+              claimType: claim.claim_type,
+            },
+          });
+        }
+
+        entities.push(entity);
+      }
+
+      // Create relationships between entities if multiple exist
+      if (entities.length >= 2) {
+        const relType = this.getRelationshipTypeFromClaim(claim.claim_type);
+        const relationship = await relationshipStore.create({
+          sessionId: claim.session_id,
+          fromEntityId: entities[0].entityId,
+          toEntityId: entities[1].entityId,
+          type: relType,
+          sourceId: claim.claim_id,
+          confidence: claim.confidence,
+        });
+        relationships.push(relationship);
+      }
+    }
+
+    return { entities, relationships };
+  }
+
+  /**
+   * Map claim type to entity type
+   */
+  private getEntityTypeFromClaim(claimType: ClaimType, _entityData: unknown): string {
+    const typeMap: Partial<Record<ClaimType, string>> = {
+      file_created: "file",
+      file_modified: "file",
+      file_deleted: "file",
+      code_added: "function",
+      code_removed: "function",
+      code_fixed: "function",
+      command_executed: "command",
+      test_passed: "test",
+      test_failed: "test",
+      error_fixed: "error",
+      dependency_added: "package",
+      config_changed: "file",
+      task_completed: "file",
+    };
+    return typeMap[claimType] ?? "file";
+  }
+
+  /**
+   * Map claim type to relationship type
+   */
+  private getRelationshipTypeFromClaim(claimType: ClaimType): string {
+    const typeMap: Partial<Record<ClaimType, string>> = {
+      file_created: "CREATED_BY",
+      file_modified: "MODIFIED_BY",
+      code_added: "CONTAINS",
+      code_fixed: "FIXES",
+      test_passed: "TESTS",
+      test_failed: "TESTS",
+      dependency_added: "DEPENDS_ON",
+    };
+    return typeMap[claimType] ?? "RELATED_TO";
+  }
+
+  /**
+   * Get entity with all relationships
+   *
+   * @param entityId - Entity ID
+   * @returns Entity with outgoing and incoming relationships
+   */
+  async getEntityWithRelationships(
+    entityId: string
+  ): Promise<EntityWithRelationships | null> {
+    return this.graphService.getEntityWithRelationships(entityId);
+  }
+
+  /**
+   * Find path between two entities in the knowledge graph
+   *
+   * @param fromEntityId - Starting entity ID
+   * @param toEntityId - Target entity ID
+   * @param maxDepth - Maximum path depth
+   * @returns Graph path or null if not found
+   */
+  async findGraphPath(
+    fromEntityId: string,
+    toEntityId: string,
+    maxDepth = 5
+  ): Promise<GraphPath | null> {
+    return this.graphService.findPath(fromEntityId, toEntityId, maxDepth);
+  }
+
+  /**
+   * Search entities by name pattern
+   *
+   * @param pattern - Search pattern
+   * @param sessionId - Optional session ID
+   * @returns Matching entities
+   */
+  async searchEntities(pattern: string, sessionId?: string): Promise<Entity[]> {
+    const sid = sessionId ?? this.state.currentSessionId;
+    if (!sid) return [];
+    return this.graphService.searchEntities(sid, pattern);
+  }
+
+  /**
+   * Get graph statistics
+   *
+   * @param sessionId - Optional session ID
+   * @returns Graph statistics
+   */
+  async getGraphStats(sessionId?: string): Promise<GraphStats | null> {
+    const sid = sessionId ?? this.state.currentSessionId;
+    if (!sid) return null;
+    return this.graphService.getStats(sid);
+  }
+
+  /**
+   * Record a temporal event
+   *
+   * @param eventType - Type of event
+   * @param sessionId - Session ID
+   * @param options - Additional options
+   * @returns Created temporal event
+   */
+  async recordTemporalEvent(
+    eventType: TemporalEvent["eventType"],
+    sessionId?: string,
+    options?: {
+      entityId?: string;
+      sourceId?: string;
+      relationshipId?: string;
+      eventData?: Record<string, unknown>;
+      occurredAt?: Date;
+    }
+  ): Promise<TemporalEvent> {
+    const sid = sessionId ?? this.state.currentSessionId;
+    if (!sid) throw new Error("No session specified");
+
+    return this.temporalStore.create({
+      sessionId: sid,
+      eventType,
+      entityId: options?.entityId,
+      sourceId: options?.sourceId,
+      relationshipId: options?.relationshipId,
+      eventData: options?.eventData,
+      occurredAt: options?.occurredAt,
+    });
+  }
+
+  /**
+   * Query events by natural language time expression
+   * Examples: "last week", "3 days ago", "today"
+   *
+   * @param expression - Natural language time expression
+   * @param sessionId - Optional session ID
+   * @returns Events in the time range
+   */
+  async queryByTime(
+    expression: string,
+    sessionId?: string
+  ): Promise<TemporalEvent[]> {
+    const sid = sessionId ?? this.state.currentSessionId;
+    if (!sid) return [];
+
+    return this.timelineService.queryByTimeExpression(sid, expression);
+  }
+
+  /**
+   * Get timeline of events
+   *
+   * @param options - Timeline options
+   * @returns Events in chronological order
+   */
+  async getTimeline(
+    options?: {
+      sessionId?: string;
+      startTime?: Date;
+      endTime?: Date;
+      limit?: number;
+    }
+  ): Promise<TemporalEvent[]> {
+    const sid = options?.sessionId ?? this.state.currentSessionId;
+    if (!sid) return [];
+
+    return this.timelineService.getTimeline(sid, {
+      startTime: options?.startTime,
+      endTime: options?.endTime,
+      limit: options?.limit,
+    });
+  }
+
+  /**
+   * Get timeline segmented by time period
+   *
+   * @param segmentDuration - Segment duration (hour, day, week, month)
+   * @param sessionId - Optional session ID
+   * @returns Timeline segments
+   */
+  async getTimelineSegments(
+    segmentDuration: "hour" | "day" | "week" | "month",
+    sessionId?: string
+  ): Promise<TimelineSegment[]> {
+    const sid = sessionId ?? this.state.currentSessionId;
+    if (!sid) return [];
+
+    return this.timelineService.getTimelineSegments(sid, segmentDuration);
+  }
+
+  /**
+   * Get activity summary for a time period
+   *
+   * @param expression - Natural language time expression
+   * @param sessionId - Optional session ID
+   * @returns Activity summary
+   */
+  async getActivitySummary(
+    expression: string,
+    sessionId?: string
+  ): Promise<{
+    timeRange: ParsedTimeRange;
+    totalEvents: number;
+    byType: Partial<Record<TemporalEvent["eventType"], number>>;
+    peakHour?: number;
+  } | null> {
+    const sid = sessionId ?? this.state.currentSessionId;
+    if (!sid) return null;
+
+    return this.timelineService.getActivitySummary(sid, expression);
+  }
+
+  /**
+   * Get temporal statistics
+   *
+   * @param sessionId - Optional session ID
+   * @returns Temporal statistics
+   */
+  async getTemporalStats(sessionId?: string): Promise<TemporalStats | null> {
+    const sid = sessionId ?? this.state.currentSessionId;
+    if (!sid) return null;
+
+    return this.temporalStore.getStats(sid);
+  }
+
+  /**
+   * Get direct access to v0.2 services
+   */
+  getEmbeddingService(): EmbeddingService {
+    return this.embeddingService;
+  }
+
+  getVectorStore(): VectorStore {
+    return this.vectorStore;
+  }
+
+  getGraphService(): GraphService {
+    return this.graphService;
+  }
+
+  getTemporalStore(): TemporalStore {
+    return this.temporalStore;
+  }
+
+  getTimelineService(): TimelineService {
+    return this.timelineService;
   }
 }
 
 /**
- * Create veridic engine
+ * Factory function to create a ClawMemoryEngine instance
  */
-export function createVeridicEngine(
+export function createClawMemoryEngine(
   db: Database,
-  config?: Partial<VeridicConfig>
-): VeridicEngine {
-  return new VeridicEngine(db, config);
+  config?: Partial<ClawMemoryConfig>
+): ClawMemoryEngine {
+  return new ClawMemoryEngine(db, config);
 }

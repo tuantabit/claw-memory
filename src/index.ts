@@ -1,10 +1,43 @@
 /**
- * Veridic-Claw
- * Verify agent claims - "Don't trust. Verify."
+ * ClawMemory-Claw - Claim verification for AI agents
  *
- * A plugin for detecting when AI agents make false claims about their actions.
- * Extracts claims from responses, collects evidence, and verifies truthfulness.
+ * @module claw-memory
+ * @description
+ * Unified memory and verification system for AI agents.
+ * Solves three critical problems:
+ * 1. Forgetting - Agent loses context of what it did
+ * 2. False Claims - Agent says "done" but didn't do it
+ * 3. Context Bloat - Context fills with irrelevant data
+ *
+ * v0.2 Features:
+ * - Auto Retry: Retries contradicted claims up to 2 times
+ * - Vector Search: Semantic memory with 128-dim embeddings
+ * - Knowledge Graph: Entity relationships (file, function, test, etc.)
+ * - Temporal Memory: Time-based queries ("last week", "3 days ago")
+ *
+ * @example
+ * ```typescript
+ * // As OpenClaw extension
+ * // In openclaw.json:
+ * {
+ *   "extensions": ["@openclaw/claw-memory"]
+ * }
+ *
+ * // Programmatic usage:
+ * import { createDatabase, createClawMemoryEngine } from "@openclaw/claw-memory";
+ *
+ * const db = createDatabase("./claw-memory.db");
+ * const engine = createClawMemoryEngine(db);
+ * await engine.initialize();
+ *
+ * const result = await engine.processResponse("I created src/app.ts");
+ * console.log(result.claims, result.warnings);
+ * ```
  */
+
+// Plugin - default export for OpenClaw
+export { default } from "./plugin.js";
+export { createClawMemoryPlugin, getPluginEngine } from "./plugin.js";
 
 // Core types
 export type {
@@ -15,12 +48,8 @@ export type {
   EvidenceSource,
   Verification,
   VerificationStatus,
-  TrustScore,
-  TrustContext,
-  TrustReport,
-  TrustIssue,
-  VeridicConfig,
-  VeridicDependencies,
+  ClawMemoryConfig,
+  ClawMemoryDependencies,
   LLMApi,
   ClaimPattern,
   ExtractionResult,
@@ -31,10 +60,10 @@ export type {
   VerificationFilter,
 } from "./types.js";
 
-// Config
+// Configuration
 export { resolveConfig, getConfigFromEnv, DEFAULT_CONFIG } from "./config.js";
 
-// Database (core)
+// Database
 export {
   type Database,
   SQLiteDatabase,
@@ -43,22 +72,21 @@ export {
 } from "./core/index.js";
 
 // Schema
-export { VERIDIC_SCHEMA, initVeridicSchema } from "./schema.js";
+export { CLAW_MEMORY_SCHEMA, initClawMemorySchema } from "./schema.js";
 
-// Engine
-export { VeridicEngine, createVeridicEngine } from "./engine.js";
+// Main engine
+export { ClawMemoryEngine, createClawMemoryEngine } from "./engine.js";
 
-// Stores
+// Data stores
 export {
   ClaimStore,
   EvidenceStore,
   VerificationStore,
-  TrustScoreStore,
   createStores,
-  type VeridicStores,
+  type ClawMemoryStores,
 } from "./store/index.js";
 
-// Extractor
+// Claim extraction
 export {
   ClaimExtractor,
   createClaimExtractor,
@@ -70,7 +98,7 @@ export {
   TEST_PATTERNS,
 } from "./extractor/index.js";
 
-// Collector
+// Evidence collection
 export {
   EvidenceCollector,
   createEvidenceCollector,
@@ -81,7 +109,7 @@ export {
   type CollectionResult,
 } from "./collector/index.js";
 
-// Verifier
+// Claim verification
 export {
   ClaimVerifier,
   createClaimVerifier,
@@ -92,20 +120,106 @@ export {
   type FullVerificationResult,
 } from "./verifier/index.js";
 
-// Tools
+// Agent tools
 export {
-  createVeridicTools,
+  createClawMemoryTools,
   createVerifyTool,
   createAuditTool,
   createExpandTool,
-  createScoreTool,
   getTool,
   type ToolDefinition,
 } from "./tools/index.js";
 
-// Plugin
-export { createVeridicPlugin } from "./plugin.js";
+// Context management (Lossless integration)
+export {
+  LosslessBridge,
+  createLosslessBridge,
+  type Message,
+  type AssembledContext,
+  type LosslessBridgeConfig,
+  DEFAULT_LOSSLESS_BRIDGE_CONFIG,
+} from "./context/index.js";
 
-// Default export - plugin factory
-import { createVeridicPlugin } from "./plugin.js";
-export default createVeridicPlugin;
+// Shared utilities (Memory integration)
+export {
+  SharedDatabaseAdapter,
+  createSharedDatabaseAdapter,
+  MemoryBridge,
+  createMemoryBridge,
+  UnifiedAssembler,
+  createUnifiedAssembler,
+  DecayLevel,
+  type ClawMemoryReceipts,
+  type MemoryEntry,
+  type MemorySearchOptions,
+  type MemoryBridgeConfig,
+  type MemoryProvider,
+  type UnifiedAssemblerConfig,
+  type UnifiedContext,
+} from "./shared/index.js";
+
+// v0.2: Auto Retry System
+export {
+  RetryManager,
+  createRetryManager,
+  generateRetryPrompt,
+  type RetryConfig,
+  type RetryResult,
+  type RetryPromptContext,
+  type RetryExecutor,
+  type UserNotifier,
+} from "./retry/index.js";
+
+// v0.2: Vector Search (Semantic Memory)
+export {
+  createEmbeddingService,
+  VectorStore,
+  createVectorStore,
+  LocalEmbeddingService,
+  type EmbeddingService,
+  type Embedding,
+  type SimilarityResult,
+  type VectorSearchOptions,
+} from "./memory/index.js";
+
+// v0.2: Knowledge Graph
+export {
+  EntityStore,
+  createEntityStore,
+  RelationshipStore,
+  createRelationshipStore,
+  GraphService,
+  createGraphService,
+  type Entity,
+  type EntityType,
+  type Relationship,
+  type RelationshipType,
+  type GraphPath,
+  type GraphStats,
+} from "./graph/index.js";
+
+// v0.2: Temporal Memory
+export {
+  TemporalStore,
+  createTemporalStore,
+  TimelineService,
+  createTimelineService,
+  type TemporalEvent,
+  type TemporalEventType,
+  type TimelineSegment,
+  type ParsedTimeRange,
+  type TemporalStats,
+} from "./temporal/index.js";
+
+// Receipt-based verification
+export {
+  ReceiptSource,
+  createReceiptSource,
+  type ReceiptSourceConfig,
+} from "./collector/sources/receipt-source.js";
+
+export {
+  ReceiptStrategy,
+  createReceiptStrategy,
+  type ReceiptStrategyConfig,
+} from "./verifier/strategies/receipt-strategy.js";

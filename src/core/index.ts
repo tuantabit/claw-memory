@@ -1,10 +1,10 @@
 /**
- * Core module exports
+ * Re-export database from @openclaw/memory-core
  */
 
+export type { Database, SqlValue } from "memory-core";
 export {
-  Database,
   SQLiteDatabase,
   createDatabase,
   getDefaultDbPath,
-} from "./database.js";
+} from "memory-core";

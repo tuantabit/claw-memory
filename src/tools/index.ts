@@ -1,22 +1,14 @@
-/**
- * Veridic Tools Index
- * Export all agent tools (like tools/ in lossless-claw)
- */
+import type { ClawMemoryEngine } from "../engine.js";
+import { createVerifyTool, type VerifyInput, type VerifyOutput } from "./claw-memory-verify.js";
+import { createAuditTool, type AuditInput, type AuditOutput } from "./claw-memory-audit.js";
+import { createExpandTool, type ExpandInput, type ExpandOutput } from "./claw-memory-expand.js";
+import { createCompactTool, type CompactInput, type CompactOutput } from "./claw-memory-compact.js";
 
-import type { VeridicEngine } from "../engine.js";
-import { createVerifyTool, type VerifyInput, type VerifyOutput } from "./veridic-verify.js";
-import { createAuditTool, type AuditInput, type AuditOutput } from "./veridic-audit.js";
-import { createExpandTool, type ExpandInput, type ExpandOutput } from "./veridic-expand.js";
-import { createScoreTool, type ScoreInput, type ScoreOutput } from "./veridic-score.js";
+export { createVerifyTool, type VerifyInput, type VerifyOutput } from "./claw-memory-verify.js";
+export { createAuditTool, type AuditInput, type AuditOutput } from "./claw-memory-audit.js";
+export { createExpandTool, type ExpandInput, type ExpandOutput } from "./claw-memory-expand.js";
+export { createCompactTool, type CompactInput, type CompactOutput } from "./claw-memory-compact.js";
 
-export { createVerifyTool, type VerifyInput, type VerifyOutput } from "./veridic-verify.js";
-export { createAuditTool, type AuditInput, type AuditOutput } from "./veridic-audit.js";
-export { createExpandTool, type ExpandInput, type ExpandOutput } from "./veridic-expand.js";
-export { createScoreTool, type ScoreInput, type ScoreOutput } from "./veridic-score.js";
-
-/**
- * Tool definition for OpenClaw
- */
 export interface ToolDefinition {
   name: string;
   description: string;
@@ -24,25 +16,19 @@ export interface ToolDefinition {
   execute: (input: unknown) => Promise<unknown>;
 }
 
-/**
- * Create all veridic tools
- */
-export function createVeridicTools(engine: VeridicEngine): ToolDefinition[] {
+export function createClawMemoryTools(engine: ClawMemoryEngine): ToolDefinition[] {
   return [
     createVerifyTool(engine) as ToolDefinition,
     createAuditTool(engine) as ToolDefinition,
     createExpandTool(engine) as ToolDefinition,
-    createScoreTool(engine) as ToolDefinition,
+    createCompactTool(engine) as ToolDefinition,
   ];
 }
 
-/**
- * Get tool by name
- */
 export function getTool(
-  engine: VeridicEngine,
+  engine: ClawMemoryEngine,
   name: string
 ): ToolDefinition | null {
-  const tools = createVeridicTools(engine);
+  const tools = createClawMemoryTools(engine);
   return tools.find((t) => t.name === name) ?? null;
 }
