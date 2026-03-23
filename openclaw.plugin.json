@@ -1,7 +1,7 @@
 {
   "id": "claw-memory",
   "name": "Claw Memory",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Verified memory for AI agents - detect lies, prevent forgetting",
   "entry": "index.js",
   "uiHints": {

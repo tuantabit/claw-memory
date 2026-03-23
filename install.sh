@@ -1,6 +1,6 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════════════════════════════════
-# CLAW-MEMORY INSTALLER v0.4.0
+# CLAW-MEMORY INSTALLER v0.5.0
 #
 # One-command install:
 #   curl -fsSL https://raw.githubusercontent.com/tuantabit/claw-memory/main/install.sh | bash
@@ -15,7 +15,7 @@ set -e
 # Configuration
 # ─────────────────────────────────────────────────────────────────────────────
 PLUGIN_ID="claw-memory"
-PLUGIN_VERSION="0.4.0"
+PLUGIN_VERSION="0.5.0"
 GITHUB_REPO="tuantabit/claw-memory"
 OPENCLAW_DIR="${OPENCLAW_DIR:-$HOME/.openclaw}"
 OPENCLAW_CONFIG="$OPENCLAW_DIR/openclaw.json"
@@ -103,7 +103,7 @@ done
 print_banner
 
 # Step 1: Check prerequisites
-echo -e "${BOLD}[1/5] Checking prerequisites...${NC}"
+echo -e "${BOLD}[1/6] Checking prerequisites...${NC}"
 
 # Check OpenClaw
 if ! command -v openclaw &> /dev/null; then
@@ -140,7 +140,7 @@ log_success "Config: $OPENCLAW_CONFIG"
 
 # Step 2: Download/Copy plugin
 echo ""
-echo -e "${BOLD}[2/5] Downloading plugin...${NC}"
+echo -e "${BOLD}[2/6] Downloading plugin...${NC}"
 
 if [ "$LOCAL_INSTALL" = true ]; then
     # Local install (for development)
@@ -207,7 +207,7 @@ fi
 
 # Step 3: Update OpenClaw config
 echo ""
-echo -e "${BOLD}[3/5] Configuring OpenClaw...${NC}"
+echo -e "${BOLD}[3/6] Configuring OpenClaw...${NC}"
 
 node -e "
 const fs = require('fs');
@@ -260,9 +260,34 @@ console.log('  Config saved');
 
 log_success "OpenClaw configured"
 
-# Step 4: Verify installation
+# Step 4: Import existing OpenClaw history
 echo ""
-echo -e "${BOLD}[4/5] Verifying installation...${NC}"
+echo -e "${BOLD}[4/6] Importing existing data...${NC}"
+
+if [ -d "$HOME/.openclaw/agents" ]; then
+    # Check if there are session files
+    SESSION_COUNT=$(find "$HOME/.openclaw/agents" -name "*.jsonl" 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$SESSION_COUNT" -gt 0 ]; then
+        log_info "Found $SESSION_COUNT session files"
+
+        # Run import script
+        if [ -f "$PLUGIN_DIR/scripts/import-history.js" ]; then
+            cd "$PLUGIN_DIR"
+            node scripts/import-history.js 2>/dev/null || log_warn "Import skipped (will run on first use)"
+            cd - > /dev/null
+        else
+            log_info "Import script not found, skipping"
+        fi
+    else
+        log_info "No existing sessions found (fresh install)"
+    fi
+else
+    log_info "No existing history found (fresh install)"
+fi
+
+# Step 5: Verify installation
+echo ""
+echo -e "${BOLD}[5/6] Verifying installation...${NC}"
 
 # Check files
 if [ -f "$PLUGIN_DIR/claw-memory.js" ] || [ -f "$PLUGIN_DIR/index.js" ]; then
@@ -286,9 +311,9 @@ else
     exit 1
 fi
 
-# Step 5: Done!
+# Step 6: Done!
 echo ""
-echo -e "${BOLD}[5/5] Installation complete!${NC}"
+echo -e "${BOLD}[6/6] Installation complete!${NC}"
 
 echo ""
 echo -e "${GREEN}╔══════════════════════════════════════════════════════════════╗${NC}"
